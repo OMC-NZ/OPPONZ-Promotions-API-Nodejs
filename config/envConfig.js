@@ -8,6 +8,7 @@ dotenv.config({ path: path.resolve(__dirname, "../.env") }); // 加载通用配�
 
 // 导出分组的配置信息
 module.exports = {
+    environment: process.env.NODE_ENV || 'development',
     app: {
         port: process.env.APP_PORT,
         apiVersion: process.env.API_VERSION,
