@@ -2,6 +2,7 @@ function getCorsOptions() {
     // 定义允许的来源
     const allowedOrigins = [
         'http://localhost:3000', // 开发环境地址
+        'http://localhost:3001',
         'https://oppopromotions.co.nz', // 生产环境地址
     ];
 
