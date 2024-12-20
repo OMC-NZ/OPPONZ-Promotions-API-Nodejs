@@ -31,9 +31,11 @@ module.exports = {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS,
     },
-    thirdParty: {
-        apiKey: process.env.THIRD_PARTY_API_KEY,
-        apiSecret: process.env.THIRD_PARTY_API_SECRET,
+    oneDrive: {
+        bannerCID: process.env.ONEDRIVE_BANES_CLIENT_ID,
+        bannerCS: process.env.ONEDRIVE_BANES_CLIENT_SECRET,
+        bannerTID: process.env.ONEDRIVE_BANES_TENANT_ID,
+        redirectURI: process.env.ONEDRIVE_REDIRECT_URI,
     },
     common: {
         tokenSecret: process.env.TOKEN_SECRET,

@@ -26,7 +26,7 @@ const getCurrentPromotions = async (req, res) => {
         }
 
         const pResults = await models.production.Promotions.findAll({
-            attributes: ["id", "name", "box_image", "terms"],
+            attributes: ["id", "name", "terms"],
             where: {
                 id: promotionIds, // 使用 promotionIds 作为条件
             },
@@ -35,14 +35,10 @@ const getCurrentPromotions = async (req, res) => {
         // 处理 terms 字段并整理返回数据
         const promot = pResults.map((item) => {
             const data = item.toJSON();
-            const { box_image, ...rest } = data;
-            return {
-                ...rest,
-                url: box_image,
-                terms: data.terms
-                    .split("\n")
-                    .map((line) => line.trim()),
-            };
+            data.terms = data.terms
+                .split("\n")
+                .map((line) => line.trim());
+            return data;
         }).reverse(); // 反转结果数组
 
         res.json({ promot });
