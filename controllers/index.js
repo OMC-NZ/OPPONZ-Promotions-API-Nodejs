@@ -3,12 +3,24 @@ const path = require("path");
 
 const controllers = {};
 
-// 动态加载 controllers 文件夹中的所有模块
-const controllerFiles = fs.readdirSync(__dirname).filter((file) => file.endsWith(".js") && file !== "index.js"); // 过滤非 JS 文件和自身文件
+// 递归加载指定目录下的所有 .js 文件（排除 index.js 本身）
+function loadModulesFromDir(dir) {
+    const files = fs.readdirSync(dir);
 
-controllerFiles.forEach((file) => {
-    const moduleName = path.basename(file, ".js"); // 获取文件名作为模块名
-    controllers[moduleName] = require(path.join(__dirname, file)); // 加载模块并添加到对象
-});
+    files.forEach((file) => {
+        const fullPath = path.join(dir, file);
+        const stat = fs.statSync(fullPath);
+
+        if (stat.isDirectory()) {
+            // 递归进入子目录
+            loadModulesFromDir(fullPath);
+        } else if (file.endsWith(".js") && file !== "index.js") {
+            const moduleName = path.basename(file, ".js");
+            controllers[moduleName] = require(fullPath);
+        }
+    })
+}
+
+loadModulesFromDir(__dirname);
 
 module.exports = controllers;

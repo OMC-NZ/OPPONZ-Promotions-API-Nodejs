@@ -1,8 +1,6 @@
 const { Op } = require("sequelize");
-const { models } = require("../models");
-const { getNewZealandTime } = require("../utils/nzTimeZone");
-const { raw } = require("mysql2");
-
+const { models } = require("../../models");
+const { getNewZealandTime } = require("../../utils/nzTimeZone");
 
 const getCurrentPromotions = async (req, res) => {
     try {
@@ -26,7 +24,7 @@ const getCurrentPromotions = async (req, res) => {
         }
 
         const pResults = await models.production.Promotions.findAll({
-            attributes: ["id", "name", "terms"],
+            attributes: ["id", "name", "terms", "box_image"],
             where: {
                 id: promotionIds, // 使用 promotionIds 作为条件
             },

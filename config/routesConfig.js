@@ -1,6 +1,6 @@
 module.exports = [
-    { method: "get", path: "/home", handler: "homeController.getCurrentPromotions" },
-    { method: "get", path: "/", handler: "testController.getTesting" },
+    { method: "get", path: "/currentpro", handler: "currentPromo.getCurrentPromotions" },
+    { method: "get", path: "/checkimei", handler: "searchPromo.getCheckIMEI" },
     // {
     //   method: "post",
     //   path: "/submit",
