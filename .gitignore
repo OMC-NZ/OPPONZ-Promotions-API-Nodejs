@@ -1,3 +1,5 @@
 # Ignore .env and its variant
 .env
 .env.*
+
+.qodo/
