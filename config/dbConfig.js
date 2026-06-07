@@ -1,66 +1,83 @@
-const { Sequelize } = require('sequelize');
-const config = require('./envConfig');
+const { Sequelize } = require("sequelize");
+const config = require("./envConfig");
 
 let sequelizeDB, sequelizeDDB;
 
+const isDevelopment = config.environment === "development";
+const isDevelopmentDatabaseRequired = process.env.DDB_REQUIRED === "true";
+
 const connectDatabase = () => {
-  // 创建生产数据库连接
+  const logging = isDevelopment ? console.log : false;
+
   sequelizeDB = new Sequelize(config.db.name, config.db.user, config.db.pass, {
     host: config.db.host,
-    dialect: 'mariadb',
-    logging: console.log, // 生产环境可以关闭日志
+    dialect: "mariadb",
+    logging,
     pool: {
-      max: 10, // 最大连接数
-      min: 0,  // 最小连接数
-      acquire: 30000, // 获取连接的最长时间 (毫秒)
-      idle: 10000,    // 连接空闲时间 (毫秒)
+      max: 10,
+      min: 0,
+      acquire: 30000,
+      idle: 10000,
     },
     dialectOptions: {
-      connectTimeout: 20000, // 连接超时时间 (毫秒)
+      connectTimeout: 20000,
     },
   });
 
-  // 在开发模式下创建第二个数据库连接
-  if (config.environment === 'development') {
+  if (isDevelopment && config.ddb.host && config.ddb.user && config.ddb.name) {
     sequelizeDDB = new Sequelize(config.ddb.name, config.ddb.user, config.ddb.pass, {
       host: config.ddb.host,
-      dialect: 'mysql',
-      logging: console.log, // 开发环境开启日志
+      dialect: "mysql",
+      logging,
+      dialectOptions: {
+        connectTimeout: 20000,
+      },
     });
   }
 };
 
-// 获取 Sequelize 实例
-const getDatabase = (useDev = false) => {
+const getDatabase = () => {
   if (!sequelizeDB) {
-    throw new Error('Production database instance is not initialized.');
+    throw new Error("Production database instance is not initialized.");
   }
-  if (config.environment === 'development' && !sequelizeDDB) {
-    throw new Error('Development database instance is not initialized.');
+  if (isDevelopmentDatabaseRequired && !sequelizeDDB) {
+    throw new Error("Development database instance is not initialized.");
   }
   return { sequelizeDB, sequelizeDDB };
 };
 
-// 测试连接
-const testConnection = () => {
-  if (sequelizeDB) {
-    console.log('Production database connection established successfully.');
-    if (sequelizeDDB) {
-      console.log('Development database connection established successfully.');
+const testConnection = async () => {
+  if (!sequelizeDB) {
+    throw new Error("Production database is not connected.");
+  }
+
+  await sequelizeDB.authenticate();
+  console.log("Production database connection established successfully.");
+
+  if (sequelizeDDB) {
+    try {
+      await sequelizeDDB.authenticate();
+      console.log("Development database connection established successfully.");
+    } catch (error) {
+      if (isDevelopmentDatabaseRequired) {
+        throw error;
+      }
+
+      console.warn("Development database is unavailable; continuing with production database only.");
+      console.warn(error.message);
+      await sequelizeDDB.close().catch(() => {});
+      sequelizeDDB = undefined;
     }
-  } else {
-    console.log('Production database is not connected.');
   }
 };
 
-// 关闭数据库连接
 const closeDatabases = async () => {
   try {
     if (sequelizeDB) await sequelizeDB.close();
     if (sequelizeDDB) await sequelizeDDB.close();
-    console.log('All database connections closed.');
+    console.log("All database connections closed.");
   } catch (error) {
-    console.error('Error closing database connections:', error);
+    console.error("Error closing database connections:", error);
   }
 };
 

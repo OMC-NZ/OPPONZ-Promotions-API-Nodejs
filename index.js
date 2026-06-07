@@ -1,46 +1,58 @@
 const express = require("express");
 const cors = require("cors");
 const getCorsOptions = require("./config/corsConfig");
+const config = require("./config/envConfig");
 const { connectDatabase, testConnection, closeDatabases } = require("./config/dbConfig");
 
 const app = express();
 
-//Initialize Database
-connectDatabase();
-testConnection();
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(cors(getCorsOptions()));
 
-// Middlewares
-app.use(express.json());  //parse the JSON format request body
-app.use(express.urlencoded({ extended: true }));  // Parse URL-encoded format
-app.use(cors(getCorsOptions()));  // Use CORS Config
-
-//determine environment
 const isDevelopment = process.env.NODE_ENV === "development";
-const PORT = isDevelopment ? 3000 : 80;  // Start Project  目前由于旧Promo项目还在使用，故80端口被占用，现新Promo项目暂使用3000端口，待正式替换前需设置该端口
+const PORT = Number(process.env.PORT || config.app.port || (isDevelopment ? 3000 : 80));
+let server;
 
-// Use our routes
-const routes = require("./routes");
-app.use(routes);
+const startServer = async () => {
+  try {
+    connectDatabase();
+    await testConnection();
 
-app.listen(3000, () => {
-  console.log(`Server is running ${isDevelopment ? "Development" : "Production"} Mode on the port: ${PORT}`);
-});
+    const routes = require("./routes");
+    app.use(routes);
 
-// Capture process exit events and close resources
+    server = app.listen(PORT, () => {
+      console.log(`Server is running ${isDevelopment ? "Development" : "Production"} Mode on the port: ${PORT}`);
+    });
+  } catch (error) {
+    console.error("Failed to start server:", error);
+    await closeDatabases();
+    process.exit(1);
+  }
+};
+
 const gracefulShutdown = async () => {
-  console.log('Shutting down gracefully...');
-  await closeDatabases(); // Close DB Connection
-  server.close(() => {
-    console.log('Server closed.');
-    process.exit(0); // Exit normally
+  console.log("Shutting down gracefully...");
+
+  if (!server) {
+    await closeDatabases();
+    process.exit(0);
+  }
+
+  server.close(async () => {
+    console.log("Server closed.");
+    await closeDatabases();
+    process.exit(0);
   });
 };
 
-// Listen for exit commands
-process.on('SIGINT', gracefulShutdown); // Listen for Ctrl+C
-process.on('SIGTERM', gracefulShutdown); // Listen for kill
-process.on('uncaughtException', async (err) => {
-  console.error('Uncaught Exception:', err);
+process.on("SIGINT", gracefulShutdown);
+process.on("SIGTERM", gracefulShutdown);
+process.on("uncaughtException", async (err) => {
+  console.error("Uncaught Exception:", err);
   await closeDatabases();
   process.exit(1);
 });
+
+startServer();

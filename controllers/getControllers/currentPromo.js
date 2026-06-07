@@ -33,9 +33,10 @@ const getCurrentPromotions = async (req, res) => {
         // 处理 terms 字段并整理返回数据
         const promot = pResults.map((item) => {
             const data = item.toJSON();
-            data.terms = data.terms
+            data.terms = (data.terms || "")
                 .split("\n")
-                .map((line) => line.trim());
+                .map((line) => line.trim())
+                .filter(Boolean);
             return data;
         }).reverse(); // 反转结果数组
 

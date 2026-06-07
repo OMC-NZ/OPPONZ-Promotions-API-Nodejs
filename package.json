@@ -13,13 +13,18 @@
   "license": "ISC",
   "dependencies": {
     "cors": "^2.8.5",
-    "cross-env": "^7.0.3",
     "dotenv": "^16.4.5",
     "express": "^4.21.1",
     "mariadb": "^3.4.0",
     "moment-timezone": "^0.5.46",
     "mysql2": "^3.11.5",
-    "nodemon": "^3.1.7",
     "sequelize": "^6.37.5"
+  },
+  "devDependencies": {
+    "cross-env": "^7.0.3",
+    "nodemon": "^3.1.7"
+  },
+  "overrides": {
+    "uuid": "^11.1.0"
   }
 }

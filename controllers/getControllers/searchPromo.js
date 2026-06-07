@@ -1,9 +1,17 @@
-const { Op } = require("sequelize");
 const { models } = require("../../models");
 
 const getCheckIMEI = async (req, res) => {
     try {
-        const { imei } = req.body;
+        const imei = req.query.imei || req.body.imei;
+
+        if (!imei) {
+            return res.status(400).json({
+                success: false,
+                message: "IMEI is required.",
+                available: false
+            });
+        }
+
         const result = await models.production.Device.findOne({
             attributes: ['model', 'channel'],
             where: {
@@ -11,7 +19,7 @@ const getCheckIMEI = async (req, res) => {
                 category: 11,
                 used: 0
             }
-        })
+        });
 
         if (!result) {
             return res.status(404).json({
@@ -30,8 +38,8 @@ const getCheckIMEI = async (req, res) => {
         console.error("Error fetching promotions:", error);
         res.status(500).send("Internal Server Error");
     }
-}
+};
 
 module.exports = {
     getCheckIMEI
-}
+};
