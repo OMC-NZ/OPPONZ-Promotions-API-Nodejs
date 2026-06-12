@@ -5,7 +5,7 @@ const controllers = {};
 
 // 递归加载指定目录下的所有 .js 文件（排除 index.js 本身）
 function loadModulesFromDir(dir) {
-    const files = fs.readdirSync(dir);
+    const files = fs.readdirSync(dir).sort();
 
     files.forEach((file) => {
         const fullPath = path.join(dir, file);
@@ -18,7 +18,7 @@ function loadModulesFromDir(dir) {
             const moduleName = path.basename(file, ".js");
             controllers[moduleName] = require(fullPath);
         }
-    })
+    });
 }
 
 loadModulesFromDir(__dirname);

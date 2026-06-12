@@ -11,7 +11,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use(cors(getCorsOptions()));
 
 const isDevelopment = process.env.NODE_ENV === "development";
-const PORT = Number(process.env.PORT || config.app.port || (isDevelopment ? 3000 : 80));
+const PORT = config.app.port || (isDevelopment ? 3000 : 80);
 let server;
 
 const startServer = async () => {

@@ -2,7 +2,7 @@ const { models } = require("../../models");
 
 const getCheckIMEI = async (req, res) => {
     try {
-        const imei = req.query.imei || req.body.imei;
+        const imei = String(req.query.imei || req.body.imei || "").trim();
 
         if (!imei) {
             return res.status(400).json({
@@ -36,7 +36,7 @@ const getCheckIMEI = async (req, res) => {
         });
     } catch (error) {
         console.error("Error fetching promotions:", error);
-        res.status(500).send("Internal Server Error");
+        res.status(500).json({ success: false, message: "Internal Server Error", available: false });
     }
 };
 

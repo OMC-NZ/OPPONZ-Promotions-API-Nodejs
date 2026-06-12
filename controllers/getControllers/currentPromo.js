@@ -15,6 +15,7 @@ const getCurrentPromotions = async (req, res) => {
                     [Op.gte]: currentTime,
                 },
             },
+            order: [["start_date", "DESC"]],
         });
 
         const promotionIds = [...new Set(ppResults.map((item) => item.promotion_id))];
@@ -26,24 +27,28 @@ const getCurrentPromotions = async (req, res) => {
         const pResults = await models.production.Promotions.findAll({
             attributes: ["id", "name", "terms", "box_image"],
             where: {
-                id: promotionIds, // 使用 promotionIds 作为条件
+                id: {
+                    [Op.in]: promotionIds,
+                },
             },
         });
 
-        // 处理 terms 字段并整理返回数据
-        const promot = pResults.map((item) => {
+        const promotionOrder = new Map(promotionIds.map((id, index) => [id, index]));
+        const promot = pResults.sort((a, b) => {
+            return promotionOrder.get(a.id) - promotionOrder.get(b.id);
+        }).map((item) => {
             const data = item.toJSON();
             data.terms = (data.terms || "")
                 .split("\n")
                 .map((line) => line.trim())
                 .filter(Boolean);
             return data;
-        }).reverse(); // 反转结果数组
+        });
 
         res.json({ promot });
     } catch (error) {
         console.error("Error fetching promotions:", error);
-        res.status(500).send("Internal Server Error");
+        res.status(500).json({ success: false, message: "Internal Server Error" });
     }
 }
 

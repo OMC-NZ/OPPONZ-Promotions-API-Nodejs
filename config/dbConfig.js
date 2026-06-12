@@ -4,7 +4,7 @@ const config = require("./envConfig");
 let sequelizeDB, sequelizeDDB;
 
 const isDevelopment = config.environment === "development";
-const isDevelopmentDatabaseRequired = process.env.DDB_REQUIRED === "true";
+const isDevelopmentDatabaseRequired = config.ddb.required;
 
 const connectDatabase = () => {
   const logging = isDevelopment ? console.log : false;
@@ -14,13 +14,13 @@ const connectDatabase = () => {
     dialect: "mariadb",
     logging,
     pool: {
-      max: 10,
-      min: 0,
-      acquire: 30000,
-      idle: 10000,
+      max: config.db.poolMax,
+      min: config.db.poolMin,
+      acquire: config.db.acquire,
+      idle: config.db.idle,
     },
     dialectOptions: {
-      connectTimeout: 20000,
+      connectTimeout: config.db.connectTimeout,
     },
   });
 
@@ -30,7 +30,7 @@ const connectDatabase = () => {
       dialect: "mysql",
       logging,
       dialectOptions: {
-        connectTimeout: 20000,
+        connectTimeout: config.db.connectTimeout,
       },
     });
   }
@@ -75,6 +75,8 @@ const closeDatabases = async () => {
   try {
     if (sequelizeDB) await sequelizeDB.close();
     if (sequelizeDDB) await sequelizeDDB.close();
+    sequelizeDB = undefined;
+    sequelizeDDB = undefined;
     console.log("All database connections closed.");
   } catch (error) {
     console.error("Error closing database connections:", error);
