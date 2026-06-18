@@ -1,27 +1,19 @@
 const { DataTypes } = require("sequelize");
 
 module.exports = (sequelize) => {
-    return sequelize.define("Customers", {
+    return sequelize.define("Promotion_Devices", {
         id: {
             type: DataTypes.INTEGER(11),
             allowNull: false,
             primaryKey: true,
             autoIncrement: true,
         },
-        first_name: {
-            type: DataTypes.STRING(45),
+        promotion_id: {
+            type: DataTypes.INTEGER(11),
             allowNull: false,
         },
-        last_name: {
-            type: DataTypes.STRING(45),
-            allowNull: false,
-        },
-        email: {
-            type: DataTypes.STRING(100),
-            allowNull: false,
-        },
-        contact: {
-            type: DataTypes.STRING(45),
+        eligible_model: {
+            type: DataTypes.STRING(7),
             allowNull: false,
         },
         updated_at: {
@@ -29,7 +21,7 @@ module.exports = (sequelize) => {
             allowNull: false,
         },
     }, {
-        tableName: "Customers",
+        tableName: "Promotion_Devices",
         timestamps: false,
     });
 };

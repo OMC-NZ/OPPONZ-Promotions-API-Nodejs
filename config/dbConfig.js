@@ -1,17 +1,24 @@
 const { Sequelize } = require("sequelize");
 const config = require("./envConfig");
 
-let sequelizeDB, sequelizeDDB;
+let activeDatabase;
 
 const isDevelopment = config.environment === "development";
-const isDevelopmentDatabaseRequired = config.ddb.required;
+const activeConfig = isDevelopment ? config.ddb : config.db;
+const activeDatabaseLabel = isDevelopment ? "Development" : "Production";
+const activeDialect = isDevelopment ? "mysql" : "mariadb";
 
 const connectDatabase = () => {
   const logging = isDevelopment ? console.log : false;
 
-  sequelizeDB = new Sequelize(config.db.name, config.db.user, config.db.pass, {
-    host: config.db.host,
-    dialect: "mariadb",
+  if (!activeConfig.host || !activeConfig.user || !activeConfig.name) {
+    throw new Error(`${activeDatabaseLabel} database configuration is incomplete.`);
+  }
+
+  activeDatabase = new Sequelize(activeConfig.name, activeConfig.user, activeConfig.pass, {
+    host: activeConfig.host,
+    port: activeConfig.port,
+    dialect: activeDialect,
     logging,
     pool: {
       max: config.db.poolMax,
@@ -23,63 +30,38 @@ const connectDatabase = () => {
       connectTimeout: config.db.connectTimeout,
     },
   });
-
-  if (isDevelopment && config.ddb.host && config.ddb.user && config.ddb.name) {
-    sequelizeDDB = new Sequelize(config.ddb.name, config.ddb.user, config.ddb.pass, {
-      host: config.ddb.host,
-      dialect: "mysql",
-      logging,
-      dialectOptions: {
-        connectTimeout: config.db.connectTimeout,
-      },
-    });
-  }
 };
 
 const getDatabase = () => {
-  if (!sequelizeDB) {
-    throw new Error("Production database instance is not initialized.");
+  if (!activeDatabase) {
+    throw new Error(`${activeDatabaseLabel} database instance is not initialized.`);
   }
-  if (isDevelopmentDatabaseRequired && !sequelizeDDB) {
-    throw new Error("Development database instance is not initialized.");
-  }
-  return { sequelizeDB, sequelizeDDB };
+
+  return {
+    sequelize: activeDatabase,
+    activeDatabase,
+    activeDatabaseLabel,
+    sequelizeDB: isDevelopment ? undefined : activeDatabase,
+    sequelizeDDB: isDevelopment ? activeDatabase : undefined,
+  };
 };
 
 const testConnection = async () => {
-  if (!sequelizeDB) {
-    throw new Error("Production database is not connected.");
+  if (!activeDatabase) {
+    throw new Error(`${activeDatabaseLabel} database is not connected.`);
   }
 
-  await sequelizeDB.authenticate();
-  console.log("Production database connection established successfully.");
-
-  if (sequelizeDDB) {
-    try {
-      await sequelizeDDB.authenticate();
-      console.log("Development database connection established successfully.");
-    } catch (error) {
-      if (isDevelopmentDatabaseRequired) {
-        throw error;
-      }
-
-      console.warn("Development database is unavailable; continuing with production database only.");
-      console.warn(error.message);
-      await sequelizeDDB.close().catch(() => {});
-      sequelizeDDB = undefined;
-    }
-  }
+  await activeDatabase.authenticate();
+  console.log(`${activeDatabaseLabel} database connection established successfully.`);
 };
 
 const closeDatabases = async () => {
   try {
-    if (sequelizeDB) await sequelizeDB.close();
-    if (sequelizeDDB) await sequelizeDDB.close();
-    sequelizeDB = undefined;
-    sequelizeDDB = undefined;
-    console.log("All database connections closed.");
+    if (activeDatabase) await activeDatabase.close();
+    activeDatabase = undefined;
+    console.log("Database connection closed.");
   } catch (error) {
-    console.error("Error closing database connections:", error);
+    console.error("Error closing database connection:", error);
   }
 };
 

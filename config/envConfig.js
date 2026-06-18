@@ -30,6 +30,7 @@ module.exports = {
     },
     db: {
         host: process.env.DB_HOST,
+        port: parseInteger(process.env.DB_PORT, 3306),
         user: process.env.DB_USER,
         pass: process.env.DB_PASS,
         name: process.env.DB_NAME,
@@ -41,6 +42,7 @@ module.exports = {
     },
     ddb: {
         host: process.env.DDB_HOST,
+        port: parseInteger(process.env.DDB_PORT, 3306),
         user: process.env.DDB_USER,
         pass: process.env.DDB_PASS,
         name: process.env.DDB_NAME,

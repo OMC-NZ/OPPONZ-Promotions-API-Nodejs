@@ -1,26 +1,22 @@
 const { DataTypes } = require("sequelize");
 
 module.exports = (sequelize) => {
-    return sequelize.define("Customers", {
+    return sequelize.define("Gifts", {
         id: {
             type: DataTypes.INTEGER(11),
             allowNull: false,
             primaryKey: true,
             autoIncrement: true,
         },
-        first_name: {
+        name: {
             type: DataTypes.STRING(45),
             allowNull: false,
         },
-        last_name: {
+        alias: {
             type: DataTypes.STRING(45),
             allowNull: false,
         },
-        email: {
-            type: DataTypes.STRING(100),
-            allowNull: false,
-        },
-        contact: {
+        color: {
             type: DataTypes.STRING(45),
             allowNull: false,
         },
@@ -29,7 +25,7 @@ module.exports = (sequelize) => {
             allowNull: false,
         },
     }, {
-        tableName: "Customers",
+        tableName: "Gifts",
         timestamps: false,
     });
 };

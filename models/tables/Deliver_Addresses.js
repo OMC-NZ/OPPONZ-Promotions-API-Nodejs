@@ -1,38 +1,39 @@
 const { DataTypes } = require("sequelize");
 
 module.exports = (sequelize) => {
-    return sequelize.define("Claims", {
+    return sequelize.define("Deliver_Addresses", {
         id: {
-            type: DataTypes.STRING(255),
+            type: DataTypes.INTEGER(11),
             allowNull: false,
             primaryKey: true,
+            autoIncrement: true,
         },
-        promotion_id: {
-            type: DataTypes.INTEGER(11),
+        claim_id: {
+            type: DataTypes.STRING(255),
             allowNull: false,
         },
-        imei: {
-            type: DataTypes.STRING(15),
+        street: {
+            type: DataTypes.STRING(255),
             allowNull: false,
         },
-        customer_id: {
-            type: DataTypes.INTEGER(11),
+        suburb: {
+            type: DataTypes.STRING(255),
             allowNull: false,
         },
-        purchase_date: {
-            type: DataTypes.DATE,
+        city: {
+            type: DataTypes.STRING(255),
             allowNull: false,
         },
-        status: {
+        postcode: {
+            type: DataTypes.STRING(255),
+            allowNull: false,
+        },
+        instructions: {
+            type: DataTypes.STRING(255),
+            allowNull: true,
+        },
+        is_current: {
             type: DataTypes.TINYINT(1),
-            allowNull: false,
-        },
-        receipt_url: {
-            type: DataTypes.STRING(255),
-            allowNull: false,
-        },
-        screenshot_url: {
-            type: DataTypes.STRING(255),
             allowNull: false,
         },
         updated_at: {
@@ -40,7 +41,7 @@ module.exports = (sequelize) => {
             allowNull: false,
         },
     }, {
-        tableName: "Claims",
+        tableName: "Deliver_Addresses",
         timestamps: false,
     });
 };

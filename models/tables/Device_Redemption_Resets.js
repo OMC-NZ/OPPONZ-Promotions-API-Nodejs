@@ -1,35 +1,35 @@
 const { DataTypes } = require("sequelize");
 
 module.exports = (sequelize) => {
-    return sequelize.define("Customers", {
+    return sequelize.define("Device_Redemption_Resets", {
         id: {
             type: DataTypes.INTEGER(11),
             allowNull: false,
             primaryKey: true,
             autoIncrement: true,
         },
-        first_name: {
-            type: DataTypes.STRING(45),
+        imei: {
+            type: DataTypes.STRING(15),
             allowNull: false,
         },
-        last_name: {
-            type: DataTypes.STRING(45),
+        previous_claim_id: {
+            type: DataTypes.STRING(255),
             allowNull: false,
         },
-        email: {
-            type: DataTypes.STRING(100),
+        reason: {
+            type: DataTypes.TEXT,
             allowNull: false,
         },
-        contact: {
-            type: DataTypes.STRING(45),
+        reset_by: {
+            type: DataTypes.INTEGER(11),
             allowNull: false,
         },
-        updated_at: {
+        reset_at: {
             type: DataTypes.DATE,
             allowNull: false,
         },
     }, {
-        tableName: "Customers",
+        tableName: "Device_Redemption_Resets",
         timestamps: false,
     });
 };

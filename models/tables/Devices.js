@@ -1,27 +1,34 @@
 const { DataTypes } = require("sequelize");
 
 module.exports = (sequelize) => {
-    return sequelize.define("Customers", {
-        id: {
-            type: DataTypes.INTEGER(11),
+    return sequelize.define("Devices", {
+        imei: {
+            type: DataTypes.STRING(15),
             allowNull: false,
             primaryKey: true,
-            autoIncrement: true,
         },
-        first_name: {
+        model: {
+            type: DataTypes.STRING(7),
+            allowNull: false,
+        },
+        category: {
+            type: DataTypes.TINYINT(2),
+            allowNull: false,
+        },
+        market_name: {
             type: DataTypes.STRING(45),
             allowNull: false,
         },
-        last_name: {
+        color: {
             type: DataTypes.STRING(45),
             allowNull: false,
         },
-        email: {
-            type: DataTypes.STRING(100),
+        channel_code: {
+            type: DataTypes.STRING(6),
             allowNull: false,
         },
-        contact: {
-            type: DataTypes.STRING(45),
+        redemption_status: {
+            type: DataTypes.TINYINT(1),
             allowNull: false,
         },
         updated_at: {
@@ -29,7 +36,7 @@ module.exports = (sequelize) => {
             allowNull: false,
         },
     }, {
-        tableName: "Customers",
+        tableName: "Devices",
         timestamps: false,
     });
 };
