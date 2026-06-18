@@ -16,10 +16,6 @@ module.exports = (sequelize) => {
             type: DataTypes.STRING(7),
             allowNull: false,
         },
-        updated_at: {
-            type: DataTypes.DATE,
-            allowNull: false,
-        },
     }, {
         tableName: "Promotion_Devices",
         timestamps: false,

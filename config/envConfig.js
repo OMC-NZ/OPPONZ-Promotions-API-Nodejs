@@ -1,7 +1,15 @@
 const dotenv = require("dotenv");
 const path = require("path");
 
+const runtimeEnvironment = process.env.NODE_ENV || "development";
+
 dotenv.config({ path: path.resolve(__dirname, "../.env") });
+dotenv.config({
+    path: path.resolve(__dirname, `../.env.${runtimeEnvironment}`),
+    override: true,
+});
+
+process.env.NODE_ENV = runtimeEnvironment;
 
 const parseInteger = (value, fallback) => {
     const parsed = Number.parseInt(value, 10);
@@ -22,7 +30,7 @@ const parseList = (value) => {
 };
 
 module.exports = {
-    environment: process.env.NODE_ENV || 'development',
+    environment: runtimeEnvironment,
     app: {
         port: parseInteger(process.env.PORT || process.env.APP_PORT, undefined),
         apiVersion: process.env.API_VERSION,
@@ -47,6 +55,11 @@ module.exports = {
         pass: process.env.DDB_PASS,
         name: process.env.DDB_NAME,
         required: process.env.DDB_REQUIRED === "true",
+        poolMax: parseInteger(process.env.DDB_POOL_MAX, 10),
+        poolMin: parseInteger(process.env.DDB_POOL_MIN, 0),
+        acquire: parseInteger(process.env.DDB_POOL_ACQUIRE, 30000),
+        idle: parseInteger(process.env.DDB_POOL_IDLE, 10000),
+        connectTimeout: parseInteger(process.env.DDB_CONNECT_TIMEOUT, 20000),
     },
     email: {
         host: process.env.EMAIL_HOST,

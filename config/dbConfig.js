@@ -21,13 +21,13 @@ const connectDatabase = () => {
     dialect: activeDialect,
     logging,
     pool: {
-      max: config.db.poolMax,
-      min: config.db.poolMin,
-      acquire: config.db.acquire,
-      idle: config.db.idle,
+      max: activeConfig.poolMax,
+      min: activeConfig.poolMin,
+      acquire: activeConfig.acquire,
+      idle: activeConfig.idle,
     },
     dialectOptions: {
-      connectTimeout: config.db.connectTimeout,
+      connectTimeout: activeConfig.connectTimeout,
     },
   });
 };
@@ -51,8 +51,15 @@ const testConnection = async () => {
     throw new Error(`${activeDatabaseLabel} database is not connected.`);
   }
 
-  await activeDatabase.authenticate();
-  console.log(`${activeDatabaseLabel} database connection established successfully.`);
+  try {
+    await activeDatabase.authenticate();
+    console.log(`${activeDatabaseLabel} database connection established successfully: ${activeConfig.name}`);
+  } catch (error) {
+    throw new Error(
+      `${activeDatabaseLabel} database connection failed: ${activeConfig.name} (${error.message})`,
+      { cause: error }
+    );
+  }
 };
 
 const closeDatabases = async () => {

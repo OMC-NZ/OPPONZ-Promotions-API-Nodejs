@@ -1,39 +1,38 @@
 const { DataTypes } = require("sequelize");
 
 module.exports = (sequelize) => {
-    return sequelize.define("Promotion_Channels", {
+    return sequelize.define("Event_Claims", {
         id: {
-            type: DataTypes.INTEGER(11),
+            type: DataTypes.STRING(255),
             allowNull: false,
             primaryKey: true,
-            autoIncrement: true,
         },
-        promotion_id: {
+        event_id: {
             type: DataTypes.INTEGER(11),
             allowNull: false,
         },
-        channel_code: {
-            type: DataTypes.STRING(6),
+        imei: {
+            type: DataTypes.STRING(15),
             allowNull: false,
         },
-        start_date: {
-            type: DataTypes.DATE,
+        customer_id: {
+            type: DataTypes.INTEGER(11),
             allowNull: false,
         },
-        end_date: {
-            type: DataTypes.DATE,
+        status: {
+            type: DataTypes.TINYINT(1),
             allowNull: false,
         },
-        redeem_end_date: {
-            type: DataTypes.DATE,
-            allowNull: false,
+        extra_data: {
+            type: DataTypes.TEXT("long"),
+            allowNull: true,
         },
         updated_at: {
             type: DataTypes.DATE,
             allowNull: false,
         },
     }, {
-        tableName: "Promotion_Channels",
+        tableName: "Event_Claims",
         timestamps: false,
     });
 };

@@ -1,31 +1,19 @@
 const { DataTypes } = require("sequelize");
 
 module.exports = (sequelize) => {
-    return sequelize.define("Promotion_Channels", {
+    return sequelize.define("Event_Models", {
         id: {
             type: DataTypes.INTEGER(11),
             allowNull: false,
             primaryKey: true,
             autoIncrement: true,
         },
-        promotion_id: {
+        event_id: {
             type: DataTypes.INTEGER(11),
             allowNull: false,
         },
-        channel_code: {
-            type: DataTypes.STRING(6),
-            allowNull: false,
-        },
-        start_date: {
-            type: DataTypes.DATE,
-            allowNull: false,
-        },
-        end_date: {
-            type: DataTypes.DATE,
-            allowNull: false,
-        },
-        redeem_end_date: {
-            type: DataTypes.DATE,
+        eligible_model: {
+            type: DataTypes.STRING(45),
             allowNull: false,
         },
         updated_at: {
@@ -33,7 +21,7 @@ module.exports = (sequelize) => {
             allowNull: false,
         },
     }, {
-        tableName: "Promotion_Channels",
+        tableName: "Event_Models",
         timestamps: false,
     });
 };
