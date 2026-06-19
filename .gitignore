@@ -5,10 +5,3 @@
 node_modules/
 
 logs/*
-!logs/.gitkeep
-!logs/requests/
-!logs/requests/.gitkeep
-!logs/errors/
-!logs/errors/.gitkeep
-!logs/security/
-!logs/security/.gitkeep
