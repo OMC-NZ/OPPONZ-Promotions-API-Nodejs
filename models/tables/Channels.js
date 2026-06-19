@@ -3,7 +3,7 @@ const { DataTypes } = require("sequelize");
 module.exports = (sequelize) => {
     return sequelize.define("Channels", {
         code: {
-            type: DataTypes.STRING(6),
+            type: DataTypes.STRING(4),
             allowNull: false,
             primaryKey: true,
         },

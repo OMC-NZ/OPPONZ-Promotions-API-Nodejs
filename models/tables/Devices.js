@@ -24,7 +24,7 @@ module.exports = (sequelize) => {
             allowNull: false,
         },
         channel_code: {
-            type: DataTypes.STRING(6),
+            type: DataTypes.STRING(4),
             allowNull: false,
         },
         redemption_status: {
