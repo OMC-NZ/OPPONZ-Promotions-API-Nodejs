@@ -13,9 +13,15 @@ function getCorsOptions() {
             if (allowedOrigins.includes(origin) || !origin) {
                 callback(null, true);
             } else {
-                callback(new Error('Not allowed by CORS'));
+                const error = new Error("Not allowed by CORS");
+                error.status = 403;
+                callback(error);
             }
         },
+        methods: ["GET", "POST", "OPTIONS"],
+        allowedHeaders: ["Content-Type", "Authorization"],
+        maxAge: 86400,
+        optionsSuccessStatus: 204,
     };
 }
 

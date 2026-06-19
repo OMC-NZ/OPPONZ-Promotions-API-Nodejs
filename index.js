@@ -1,14 +1,29 @@
 const express = require("express");
 const cors = require("cors");
+const helmet = require("helmet");
 const getCorsOptions = require("./config/corsConfig");
 const config = require("./config/envConfig");
 const { connectDatabase, testConnection, closeDatabases } = require("./config/dbConfig");
+const {
+  apiRateLimiter,
+  recaptchaRateLimiter,
+  enforceHttps,
+} = require("./config/securityConfig");
 
 const app = express();
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.disable("x-powered-by");
+if (config.app.trustProxy) {
+  app.set("trust proxy", 1);
+}
+
+app.use(helmet());
 app.use(cors(getCorsOptions()));
+app.use(enforceHttps);
+app.use(express.json({ limit: config.app.bodyLimit }));
+app.use(express.urlencoded({ extended: true, limit: config.app.bodyLimit }));
+app.use(apiRateLimiter);
+app.use("/api/recaptcha/verify", recaptchaRateLimiter);
 
 const isDevelopment = process.env.NODE_ENV === "development";
 const PORT = config.app.port || (isDevelopment ? 3000 : 80);
@@ -21,6 +36,19 @@ const startServer = async () => {
 
     const routes = require("./routes");
     app.use(routes);
+    app.use((req, res) => {
+      res.status(404).json({
+        success: false,
+        message: "Route not found.",
+      });
+    });
+    app.use((error, req, res, next) => {
+      console.error("Request error:", error.message);
+      res.status(error.status || 500).json({
+        success: false,
+        message: error.status ? error.message : "Internal Server Error",
+      });
+    });
 
     server = app.listen(PORT, () => {
       console.log(`Server is running ${isDevelopment ? "Development" : "Production"} Mode on the port: ${PORT}`);

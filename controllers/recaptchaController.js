@@ -1,5 +1,5 @@
 const https = require("https");
-const config = require("../../config/envConfig");
+const config = require("../config/envConfig");
 
 const SITEVERIFY_HOSTNAME = "www.google.com";
 const SITEVERIFY_PATH = "/recaptcha/api/siteverify";

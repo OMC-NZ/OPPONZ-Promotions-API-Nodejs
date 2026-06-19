@@ -21,6 +21,11 @@ const parseNumber = (value, fallback) => {
     return Number.isNaN(parsed) ? fallback : parsed;
 };
 
+const parseBoolean = (value, fallback = false) => {
+    if (value === undefined) return fallback;
+    return value === "true";
+};
+
 const parseList = (value) => {
     if (!value) return [];
     return value
@@ -35,6 +40,9 @@ module.exports = {
         port: parseInteger(process.env.PORT || process.env.APP_PORT, undefined),
         apiVersion: process.env.API_VERSION,
         corsOrigins: parseList(process.env.CORS_ORIGINS),
+        trustProxy: parseBoolean(process.env.TRUST_PROXY),
+        enforceHttps: parseBoolean(process.env.ENFORCE_HTTPS),
+        bodyLimit: process.env.BODY_LIMIT || "100kb",
     },
     db: {
         host: process.env.DB_HOST,
@@ -79,5 +87,10 @@ module.exports = {
     recaptcha: {
         secretKey: process.env.RECAPTCHA_SECRET_KEY,
         minScore: parseNumber(process.env.RECAPTCHA_MIN_SCORE, 0.3),
+    },
+    rateLimit: {
+        windowMs: parseInteger(process.env.RATE_LIMIT_WINDOW_MS, 15 * 60 * 1000),
+        max: parseInteger(process.env.RATE_LIMIT_MAX, 200),
+        recaptchaMax: parseInteger(process.env.RECAPTCHA_RATE_LIMIT_MAX, 20),
     },
 };
