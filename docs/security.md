@@ -1,356 +1,134 @@
-# API Security Guide
+# API Security Overview
 
-This document summarizes the security setup for the OPPONZ Promotions API.
+This document provides a high-level security overview for the OPPONZ Promotions API. It is safe to keep in the repository because it avoids real secrets, infrastructure details, and production-specific values.
 
-## Environment Loading
+## Security Scope
 
-The app loads `.env` first, then loads the environment-specific file with override:
+The API includes layered controls for public consumer-facing endpoints and future internal/admin endpoints. Security is handled through middleware, environment-based configuration, logging, validation, and safer response patterns.
 
-- Development: `.env` + `.env.development`
-- Production: `.env` + `.env.production`
+## Environment Configuration
 
-Environment files are ignored by Git. Any server-side change must be added manually to the deployment environment.
+The app uses environment files for local and production settings. These files are ignored by Git and must be configured directly in the deployment environment.
 
-## Production Startup Checks
+Do not commit:
 
-Production startup runs `config/startupSecurityCheck.js`.
+- Database credentials
+- API keys
+- Token secrets
+- SMTP credentials
+- Production hostnames or infrastructure details
 
-Required production settings:
+## Request Protection
 
-```env
-ENFORCE_HTTPS=true
-TRUST_PROXY=1
-IP_DEBUG=false
-INTERNAL_API_KEYS=your-long-random-api-key
-```
+The API includes controls for:
 
-Recommended production settings:
+- Request rate limiting
+- Trusted proxy IP handling
+- HTTPS enforcement
+- CORS origin restrictions
+- Security response headers
+- Request body size limits
+- API key protection for internal-style endpoints
+- reCAPTCHA support for public form submissions
 
-```env
-CORS_ORIGINS=https://your-frontend-domain.example
-TOKEN_SECRET=your-long-random-token-secret
-BODY_LIMIT=100kb
-ADMIN_EMAIL=admin@example.com
-ERROR_ALERT_COOLDOWN_MS=300000
-```
+The exact production values should be managed outside source control.
 
-`CORS_ORIGINS` should contain frontend website origins, not the API domain. Multiple owned frontend sites can be separated by commas:
+## Public And Internal API Classification
 
-```env
-CORS_ORIGINS=https://site1.example,https://site2.example
-```
+In this project:
 
-## Trusted Proxy And Real IP
+- Public APIs are called by public-facing systems, such as consumer promotion pages or claim forms.
+- Internal APIs are called by internal systems, such as admin dashboards, approval tools, reporting tools, or internal automation.
 
-`TRUST_PROXY` controls how Express reads the real client IP when the app runs behind a reverse proxy or load balancer.
+Public APIs should use controls such as rate limiting, reCAPTCHA where appropriate, strict validation, duplicate checks, and limited response fields.
 
-- Local development: `TRUST_PROXY=false`
-- Production behind one trusted proxy: `TRUST_PROXY=1`
+Internal APIs should additionally use stronger authentication and authorization when they expose sensitive data or modify business records.
 
-`IP_DEBUG=true` enables `/api/health/ip` for local diagnostics. It should be `false` in production.
+## Response Safety
 
-## Rate Limiting
+API responses should use the shared response helpers so that success and error formats remain consistent.
 
-Rate limits are configured in `config/securityConfig.js` and mounted in `routes/index.js`.
+Production error responses must not expose:
 
-Current limiter groups:
+- SQL errors
+- Stack traces
+- Server paths
+- Internal implementation details
+- Secrets or tokens
 
-- Default fallback limiter
-- Public read limiter
-- Write limiter
-- reCAPTCHA limiter
-- Health limiter
+Full diagnostic details should stay in server-side logs and controlled alert channels.
 
-When rate limited, the API returns unified error format with code `RATE_LIMIT_EXCEEDED` and writes a security log entry.
+## Logging And Alerts
 
-## CORS
+The API separates operational logs, error logs, and security-related logs. Logs are rotated and retained for a limited period.
 
-CORS is configured in `config/corsConfig.js`.
+Production error alerts can be sent to an administrator when configured. Alerts are rate-limited to avoid notification floods.
 
-Development allows localhost and 127.0.0.1 origins by default. Production only allows origins listed in `CORS_ORIGINS`.
+Logs and alerts should support troubleshooting without exposing raw private data or secrets.
 
-Allowed request headers include:
+## Sensitive Data Redaction
 
-- `Content-Type`
-- `Authorization`
-- `X-API-Key`
-- `X-Request-Id`
-- `X-Recaptcha-Token`
+Sensitive log data is redacted before it is written or sent in alerts.
 
-Blocked origins are written to the security log.
+The redaction strategy is:
 
-## Security Headers
-
-Helmet is configured in `config/helmetConfig.js`.
-
-The API disables `X-Powered-By` and uses security headers for:
-
-- Content Security Policy
-- Frame protection
-- Referrer policy
-- MIME sniffing protection
-- Cross-origin policies
-- Production HSTS
-
-## API Key Protection
-
-Internal/admin routes can use:
-
-```js
-const { requireApiKey } = require("../middlewares/apiKeyAuth");
-```
-
-Clients must send:
-
-```http
-X-API-Key: your-key
-```
-
-Configure keys with:
-
-```env
-INTERNAL_API_KEYS=your-long-random-api-key
-```
-
-Multiple keys can be comma-separated later if needed.
-
-## reCAPTCHA
-
-reCAPTCHA verification is handled by:
-
-- `services/recaptchaService.js`
-- `middlewares/recaptchaMiddleware.js`
-- `controllers/recaptchaController.js`
-
-Configure:
-
-```env
-RECAPTCHA_SECRET_KEY=your-secret-key
-RECAPTCHA_MIN_SCORE=0.3
-```
-
-Reusable middleware example:
-
-```js
-const { requireRecaptcha } = require("../middlewares/recaptchaMiddleware");
-
-router.post("/claim", requireRecaptcha({ action: "claim" }), createClaim);
-```
-
-## Unified API Response Format
-
-Responses should use `utils/apiResponse.js`.
-
-Success:
-
-```json
-{
-  "success": true,
-  "data": {},
-  "requestId": "..."
-}
-```
-
-Error:
-
-```json
-{
-  "success": false,
-  "message": "Bad Request",
-  "requestId": "...",
-  "code": "VALIDATION_ERROR"
-}
-```
-
-Production `500` errors do not expose SQL messages, stack traces, or file paths to clients. Full details stay in logs and production alert emails.
-
-## Error Handling And Email Alerts
-
-Error handling is centralized in `middlewares/errorHandler.js`.
-
-Production error alerts are sent by `services/errorAlertService.js` when:
-
-- `NODE_ENV=production`
-- status is `500` or above
-- SMTP settings and `ADMIN_EMAIL` are configured
-- the alert fingerprint is outside the cooldown window
-
-Configure:
-
-```env
-EMAIL_HOST=
-EMAIL_PORT=
-EMAIL_USER=
-EMAIL_PASS=
-ADMIN_EMAIL=
-ERROR_ALERT_COOLDOWN_MS=300000
-```
-
-## Logging
-
-Logs are written by `services/logService.js`.
-
-Current log folders:
-
-- `logs/requests/req-YYYY-MM-DD.log`
-- `logs/errors/err-YYYY-MM-DD.log`
-- `logs/security/sec-YYYY-MM-DD.log`
-
-Default retention is 21 days.
-
-Optional settings:
-
-```env
-LOG_DIR=logs
-LOG_RETENTION_DAYS=21
-LOG_CLEANUP_INTERVAL_MS=3600000
-```
-
-## Sensitive Log Redaction
-
-Sensitive data is redacted by `utils/redactSensitiveData.js` before writing logs or sending alert emails.
-
-Fully redacted examples:
-
-- `password`
-- `token`
-- `secret`
-- `apiKey`
-- `authorization`
-- `cookie`
-- `recaptchaToken`
-
-Partially preserved for troubleshooting:
-
-- `email`: keeps first letter and domain
-- `contact`: keeps last 4 digits
-- `imei`: keeps last 4 digits
-- `receipt_url` / `screenshot_url`: keeps file name only
-- `street` / full address: redacted
-- IDs such as `claim_id`, `customer_id`, `promotion_id`: preserved
-
-The goal is to keep enough information to find the database record without exposing complete private data or secrets.
+- Fully hide secrets, tokens, keys, cookies, and authorization values.
+- Partially mask personal identifiers where possible.
+- Preserve non-sensitive database IDs when they help locate records.
+- Keep enough information for debugging without exposing full private data.
 
 ## Field Allowlists
 
-API response fields are listed in `config/apiFields.js`.
+External API queries should use explicit field allowlists instead of returning full Sequelize model objects.
 
 Rules:
 
-- Do not return full Sequelize model objects directly.
-- Use explicit `attributes` in external API queries.
-- `updated_at` fields are excluded by default.
-- Sensitive fields should be removed from the allowlist before exposing an API publicly.
-
-Example:
-
-```js
-const apiFields = require("../config/apiFields");
-
-Promotions.findAll({
-  attributes: apiFields.Promotions,
-});
-```
+- Query only the fields needed by the endpoint.
+- Do not expose internal timestamps or operational fields unless required.
+- Review sensitive fields before exposing any new endpoint.
+- Keep allowlists updated when models change.
 
 ## Request Validation
 
-Reusable validation middleware is in:
+Request validation is centralized through reusable validators and validation middleware.
 
-- `middlewares/validateRequest.js`
-- `utils/validators.js`
+Validation should be applied to:
 
-Current validators include:
+- Request bodies
+- Query strings
+- Route params
 
-- `required()`
-- `optional()`
-- `email()`
-- `imei()`
-- `contact()`
-- `postcode()`
-- `maoriEnglishName()`
-- `street()`
-- `stringLength()`
-- `integer()`
-- `oneOf()`
-- `date()`
-- `url()`
+Current validation support includes common checks for required values, emails, IMEI values, contact numbers, postcodes, strings, integers, dates, URLs, and allowed values. Some user-facing text fields may be normalized instead of rejected when safe to do so.
 
-Validation middleware defaults to strict mode. Unknown fields return `400 VALIDATION_ERROR`.
+New APIs should define their accepted fields explicitly. Unknown fields should remain rejected unless a specific endpoint needs a flexible payload.
 
-Example:
+## Route And Method Handling
 
-```js
-const { validateRequest } = require("../middlewares/validateRequest");
-const { required, email, imei } = require("../utils/validators");
+Known routes should reject unsupported HTTP methods with a controlled response.
 
-router.post(
-  "/claim",
-  validateRequest({
-    body: {
-      email: [required(), email()],
-      imei: [required(), imei()],
-    },
-  }),
-  createClaim
-);
-```
+Unknown routes should return a controlled not-found response and be logged as security-relevant activity.
 
-Current specific rules:
+## Operational Checklist
 
-- IMEI must be a 15-digit number starting with `86`.
-- Email must contain `@` and at least one `.` after `@`.
-- Contact must contain digits only.
-- Postcode must be exactly 4 digits and should stay as a string.
-- Name fields are normalized to title case.
-- Street fields are normalized to title case, and letters immediately after a street number are uppercased, for example `87a albert street` becomes `87A Albert Street`.
+Before production deployment, confirm that:
 
-## Route And Method Security
+- Environment variables are configured outside Git.
+- Production secrets are not present in committed files.
+- The database user follows least-privilege principles.
+- Public endpoints do not expose unnecessary fields.
+- Form submission endpoints use validation and anti-abuse controls.
+- Internal/admin endpoints use appropriate authentication and authorization.
+- Logs and alerts do not expose raw sensitive data.
 
-`middlewares/routeSecurity.js` handles route security behavior.
+## Maintenance Notes
 
-- Known route with wrong HTTP method returns `405 METHOD_NOT_ALLOWED`.
-- Unknown route returns `404 ROUTE_NOT_FOUND`.
-- Both are written to security logs.
+When adding a new endpoint:
 
-Existing routes use this pattern:
-
-```js
-router.route("/current")
-  .get(getCurrentPromotions)
-  .all(methodNotAllowed(["GET"]));
-```
-
-## Server Timeouts
-
-Server timeout settings are applied in `index.js`.
-
-Recommended settings:
-
-```env
-SERVER_REQUEST_TIMEOUT_MS=30000
-SERVER_HEADERS_TIMEOUT_MS=10000
-SERVER_KEEP_ALIVE_TIMEOUT_MS=5000
-```
-
-## HTTPS Enforcement
-
-Production should set:
-
-```env
-ENFORCE_HTTPS=true
-```
-
-HTTP requests return `426 HTTPS_REQUIRED` when HTTPS enforcement is enabled and the request is not secure.
-
-## Manual Production Reminder
-
-Before production deployment, verify:
-
-- Production database account uses least privilege.
-- `.env.production` values are present on the server.
-- `TRUST_PROXY` matches the real proxy setup.
-- `CORS_ORIGINS` contains only owned frontend origins.
-- `IP_DEBUG=false`.
-- `ENFORCE_HTTPS=true`.
-- `INTERNAL_API_KEYS` is configured.
-- SMTP and `ADMIN_EMAIL` are configured if production email alerts are expected.
+1. Classify it as public or internal.
+2. Choose the correct rate limiter.
+3. Add request validation.
+4. Use response helpers.
+5. Use field allowlists for database queries.
+6. Add reCAPTCHA or API key protection where appropriate.
+7. Ensure errors flow through the central error handler.
+8. Avoid logging raw request bodies or unredacted sensitive data.
