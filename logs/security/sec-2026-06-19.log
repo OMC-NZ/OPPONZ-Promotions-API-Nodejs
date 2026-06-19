@@ -1,0 +1,2 @@
+{"timestamp":"2026-06-19 22:53:55","type":"security","requestId":"rid-405","event":"METHOD_NOT_ALLOWED","ip":"127.0.0.1","method":"DELETE","path":"/api/health","status":405,"allowedMethods":["GET"]}
+{"timestamp":"2026-06-19 22:53:55","type":"security","requestId":"rid-404","event":"ROUTE_NOT_FOUND","ip":"127.0.0.1","method":"GET","path":"/.env","status":404}

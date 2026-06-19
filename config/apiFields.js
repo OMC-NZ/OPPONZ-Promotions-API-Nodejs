@@ -1,0 +1,99 @@
+const apiFields = {
+    Channels: [
+        "code",
+        "name",
+        "category",
+    ],
+    Claims: [
+        "promotion_id",
+        "imei",
+        "customer_id",
+        "purchase_date",
+        "status",
+        "receipt_url",
+        "screenshot_url",
+    ],
+    Claim_Gifts: [
+        "gift_id",
+        "claim_id",
+    ],
+    Customers: [
+        "first_name",
+        "last_name",
+        "email",
+        "contact",
+    ],
+    Deliver_Addresses: [
+        "claim_id",
+        "street",
+        "suburb",
+        "city",
+        "postcode",
+        "instructions",
+        "is_current",
+    ],
+    Devices: [
+        "imei",
+        "model",
+        "category",
+        "market_name",
+        "color",
+        "channel_code",
+        "redemption_status",
+    ],
+    Device_Redemption_Resets: [
+        "imei",
+        "previous_claim_id",
+        "reason",
+        "reset_by",
+        "reset_at",
+    ],
+    Events: [
+        "name",
+        "description",
+        "banner_url",
+        "slug_url",
+        "requires_imei",
+        "start_date",
+        "end_date",
+    ],
+    Event_Claims: [
+        "event_id",
+        "imei",
+        "customer_id",
+        "status",
+        "extra_data",
+    ],
+    Event_Models: [
+        "event_id",
+        "eligible_model",
+    ],
+    Gifts: [
+        "name",
+        "alias",
+        "color",
+    ],
+    Promotions: [
+        "name",
+        "description",
+        "banner_url",
+        "slug_url",
+    ],
+    Promotion_Channels: [
+        "promotion_id",
+        "channel_code",
+        "start_date",
+        "end_date",
+        "redeem_end_date",
+    ],
+    Promotion_Devices: [
+        "promotion_id",
+        "eligible_model",
+    ],
+    Promotion_Gifts: [
+        "promotion_id",
+        "gift_id",
+    ],
+};
+
+module.exports = apiFields;

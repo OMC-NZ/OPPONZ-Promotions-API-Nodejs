@@ -1,14 +1,16 @@
-const moment = require('moment-timezone');
+const moment = require("moment-timezone");
+
+const NZ_TIME_ZONE = "Pacific/Auckland";
 
 function getNewZealandTime() {
-    const serverTime = new Date(); // 服务器系统时间（UTC）
-    
-    // 使用 moment-timezone 将 UTC 时间转换为新西兰时间
-    const newZealandTime = moment(serverTime).tz('Pacific/Auckland').format('YYYY-MM-DD HH:mm:ss');
-    
-    return newZealandTime;
-  }
+  return moment().tz(NZ_TIME_ZONE).format("YYYY-MM-DD HH:mm:ss");
+}
 
-  module.exports = {
-    getNewZealandTime
-  };
+function getNewZealandTimestamp() {
+  return moment().tz(NZ_TIME_ZONE).format();
+}
+
+module.exports = {
+  getNewZealandTime,
+  getNewZealandTimestamp,
+};

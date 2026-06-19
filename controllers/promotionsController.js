@@ -1,13 +1,16 @@
 const { Op } = require("sequelize");
 const { models } = require("../models");
 const { getNewZealandTime } = require("../utils/nzTimeZone");
+const { sendSuccess } = require("../utils/apiResponse");
+const apiFields = require("../config/apiFields");
 
-const getCurrentPromotions = async (req, res) => {
+const getCurrentPromotions = async (req, res, next) => {
     try {
         const currentTime = getNewZealandTime();
         const { Promotion_Channels, Promotions, Channels } = models.active;
 
         const promotionChannels = await Promotion_Channels.findAll({
+            attributes: apiFields.Promotion_Channels,
             where: {
                 start_date: {
                     [Op.lte]: currentTime,
@@ -23,8 +26,7 @@ const getCurrentPromotions = async (req, res) => {
         });
 
         if (promotionChannels.length === 0) {
-            return res.status(200).json({
-                success: true,
+            return sendSuccess(req, res, {
                 data: [],
             });
         }
@@ -34,6 +36,7 @@ const getCurrentPromotions = async (req, res) => {
 
         const [promotions, channels] = await Promise.all([
             Promotions.findAll({
+                attributes: apiFields.Promotions,
                 where: {
                     id: {
                         [Op.in]: promotionIds,
@@ -41,6 +44,7 @@ const getCurrentPromotions = async (req, res) => {
                 },
             }),
             Channels.findAll({
+                attributes: apiFields.Channels,
                 where: {
                     code: {
                         [Op.in]: channelCodes,
@@ -63,16 +67,14 @@ const getCurrentPromotions = async (req, res) => {
             },
         }));
 
-        return res.status(200).json({
-            success: true,
+        return sendSuccess(req, res, {
             data,
         });
     } catch (error) {
         console.error("Error fetching current promotions:", error);
-        return res.status(500).json({
-            success: false,
-            message: "Failed to fetch current promotions.",
-        });
+        error.status = 500;
+        error.publicMessage = "Failed to fetch current promotions.";
+        return next(error);
     }
 };
 

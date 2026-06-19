@@ -1,5 +1,8 @@
 const config = require("../config/envConfig");
 const { getDatabase } = require("../config/dbConfig");
+const { getIpDebugInfo } = require("../config/securityConfig");
+const { getNewZealandTimestamp } = require("../utils/nzTimeZone");
+const { sendSuccess, sendError } = require("../utils/apiResponse");
 
 const getHealth = async (req, res) => {
     res.set("Cache-Control", "no-store");
@@ -8,28 +11,57 @@ const getHealth = async (req, res) => {
         const { sequelize, activeDatabaseLabel } = getDatabase();
         await sequelize.authenticate();
 
-        return res.status(200).json({
-            status: "ok",
-            timestamp: new Date().toISOString(),
-            uptimeSeconds: Math.floor(process.uptime()),
-            environment: config.environment,
-            database: {
-                status: "up",
-                target: activeDatabaseLabel.toLowerCase(),
+        return sendSuccess(req, res, {
+            data: {
+                status: "ok",
+                timestamp: getNewZealandTimestamp(),
+                timezone: "Pacific/Auckland",
+                uptimeSeconds: Math.floor(process.uptime()),
+                environment: config.environment,
+                database: {
+                    status: "up",
+                    target: activeDatabaseLabel.toLowerCase(),
+                },
             },
         });
     } catch (error) {
         console.error("Health check failed:", error.message);
-        return res.status(503).json({
-            status: "unavailable",
-            timestamp: new Date().toISOString(),
-            database: {
-                status: "down",
+        return sendError(req, res, {
+            statusCode: 503,
+            message: "Service Unavailable",
+            code: "HEALTH_CHECK_FAILED",
+            debug: {
+                status: "unavailable",
+                timestamp: getNewZealandTimestamp(),
+                timezone: "Pacific/Auckland",
+                database: {
+                    status: "down",
+                },
+                message: error.message,
             },
         });
     }
 };
 
+const getIpDebug = (req, res) => {
+    if (!config.app.ipDebug) {
+        return sendError(req, res, {
+            statusCode: 404,
+            message: "Route not found.",
+            code: "ROUTE_NOT_FOUND",
+        });
+    }
+
+    res.set("Cache-Control", "no-store");
+    return sendSuccess(req, res, {
+        data: {
+            trustProxy: config.app.trustProxy,
+            client: getIpDebugInfo(req),
+        },
+    });
+};
+
 module.exports = {
     getHealth,
+    getIpDebug,
 };

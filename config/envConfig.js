@@ -1,11 +1,13 @@
 const dotenv = require("dotenv");
 const path = require("path");
 
-const runtimeEnvironment = process.env.NODE_ENV || "development";
+const baseEnvPath = path.resolve(__dirname, "../.env");
+dotenv.config({ path: baseEnvPath });
 
-dotenv.config({ path: path.resolve(__dirname, "../.env") });
+const runtimeEnvironment = process.env.NODE_ENV || "development";
+const environmentEnvPath = path.resolve(__dirname, `../.env.${runtimeEnvironment}`);
 dotenv.config({
-    path: path.resolve(__dirname, `../.env.${runtimeEnvironment}`),
+    path: environmentEnvPath,
     override: true,
 });
 
@@ -26,6 +28,16 @@ const parseBoolean = (value, fallback = false) => {
     return value === "true";
 };
 
+const parseTrustProxy = (value) => {
+    if (!value || value === "false") return false;
+    if (value === "true") return true;
+
+    const parsed = Number.parseInt(value, 10);
+    if (!Number.isNaN(parsed)) return parsed;
+
+    return value;
+};
+
 const parseList = (value) => {
     if (!value) return [];
     return value
@@ -36,13 +48,28 @@ const parseList = (value) => {
 
 module.exports = {
     environment: runtimeEnvironment,
+    envFiles: {
+        base: baseEnvPath,
+        environment: environmentEnvPath,
+    },
     app: {
         port: parseInteger(process.env.PORT || process.env.APP_PORT, undefined),
         apiVersion: process.env.API_VERSION,
         corsOrigins: parseList(process.env.CORS_ORIGINS),
-        trustProxy: parseBoolean(process.env.TRUST_PROXY),
+        trustProxy: parseTrustProxy(process.env.TRUST_PROXY),
+        ipDebug: parseBoolean(process.env.IP_DEBUG, runtimeEnvironment === "development"),
         enforceHttps: parseBoolean(process.env.ENFORCE_HTTPS),
         bodyLimit: process.env.BODY_LIMIT || "100kb",
+    },
+    logs: {
+        directory: process.env.LOG_DIR || "logs",
+        retentionDays: parseInteger(process.env.LOG_RETENTION_DAYS, 21),
+        cleanupIntervalMs: parseInteger(process.env.LOG_CLEANUP_INTERVAL_MS, 60 * 60 * 1000),
+    },
+    server: {
+        requestTimeoutMs: parseInteger(process.env.SERVER_REQUEST_TIMEOUT_MS, 30000),
+        headersTimeoutMs: parseInteger(process.env.SERVER_HEADERS_TIMEOUT_MS, 10000),
+        keepAliveTimeoutMs: parseInteger(process.env.SERVER_KEEP_ALIVE_TIMEOUT_MS, 5000),
     },
     db: {
         host: process.env.DB_HOST,
@@ -74,6 +101,8 @@ module.exports = {
         port: parseInteger(process.env.EMAIL_PORT, undefined),
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS,
+        adminEmail: process.env.ADMIN_EMAIL,
+        alertCooldownMs: parseInteger(process.env.ERROR_ALERT_COOLDOWN_MS, 300000),
     },
     oneDrive: {
         bannerCID: process.env.ONEDRIVE_BANES_CLIENT_ID || process.env.ONEDRIVE_BANNERS_CLIENT_ID,
@@ -83,6 +112,7 @@ module.exports = {
     },
     common: {
         tokenSecret: process.env.TOKEN_SECRET,
+        internalApiKeys: parseList(process.env.INTERNAL_API_KEYS),
     },
     recaptcha: {
         secretKey: process.env.RECAPTCHA_SECRET_KEY,
@@ -91,6 +121,13 @@ module.exports = {
     rateLimit: {
         windowMs: parseInteger(process.env.RATE_LIMIT_WINDOW_MS, 15 * 60 * 1000),
         max: parseInteger(process.env.RATE_LIMIT_MAX, 200),
+        publicWindowMs: parseInteger(process.env.PUBLIC_RATE_LIMIT_WINDOW_MS, 15 * 60 * 1000),
+        publicMax: parseInteger(process.env.PUBLIC_RATE_LIMIT_MAX, 300),
+        writeWindowMs: parseInteger(process.env.WRITE_RATE_LIMIT_WINDOW_MS, 60 * 60 * 1000),
+        writeMax: parseInteger(process.env.WRITE_RATE_LIMIT_MAX, 10),
+        recaptchaWindowMs: parseInteger(process.env.RECAPTCHA_RATE_LIMIT_WINDOW_MS, 15 * 60 * 1000),
         recaptchaMax: parseInteger(process.env.RECAPTCHA_RATE_LIMIT_MAX, 20),
+        healthWindowMs: parseInteger(process.env.HEALTH_RATE_LIMIT_WINDOW_MS, 60 * 1000),
+        healthMax: parseInteger(process.env.HEALTH_RATE_LIMIT_MAX, 120),
     },
 };
