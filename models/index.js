@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { getDatabase } = require("../config/dbConfig");
+const configureAssociations = require("./associations");
 const {
     sequelize,
     sequelizeDB: pdb,
@@ -20,6 +21,8 @@ modelFiles.forEach((file) => {
     const model = require(path.join(__dirname, 'tables', file))(sequelize);
     activeModels[model.name] = model;
 });
+
+configureAssociations(activeModels);
 
 module.exports = {
     sequelize,

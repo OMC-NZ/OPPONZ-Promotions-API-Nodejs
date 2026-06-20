@@ -74,6 +74,7 @@ const apiFields = {
         "color",
     ],
     Promotions: [
+        "id",
         "name",
         "description",
         "banner_url",

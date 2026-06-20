@@ -1,16 +1,69 @@
-const { Op } = require("sequelize");
+const { Op, fn, col } = require("sequelize");
 const { models } = require("../models");
 const { getNewZealandTime } = require("../utils/nzTimeZone");
 const { sendSuccess } = require("../utils/apiResponse");
 const apiFields = require("../config/apiFields");
 
+const sortChannelNames = (left, right) => {
+    const leftFirstWord = left.trim().split(/\s+/)[0];
+    const rightFirstWord = right.trim().split(/\s+/)[0];
+    const firstWordComparison = leftFirstWord.localeCompare(rightFirstWord, "en-NZ", {
+        sensitivity: "base",
+    });
+
+    return firstWordComparison || left.localeCompare(right, "en-NZ", { sensitivity: "base" });
+};
+
+const groupChannelsByDate = (availabilityMap, channelMap) => {
+    const groupedChannels = new Map();
+
+    availabilityMap.forEach((availability, channelCode) => {
+        const channel = channelMap.get(channelCode);
+        if (!channel?.name) return;
+
+        const startDate = availability.start_date;
+        const endDate = availability.end_date;
+        const groupKey = `${startDate}|${endDate}`;
+
+        if (!groupedChannels.has(groupKey)) {
+            groupedChannels.set(groupKey, {
+                names: new Set(),
+                start_date: startDate,
+                end_date: endDate,
+            });
+        }
+
+        groupedChannels.get(groupKey).names.add(channel.name.trim());
+    });
+
+    return [...groupedChannels.values()]
+        .map((group) => ({
+            names: [...group.names].sort(sortChannelNames),
+            start_date: group.start_date,
+            end_date: group.end_date,
+        }))
+        .sort((left, right) => {
+            const startDateComparison = left.start_date.localeCompare(right.start_date);
+            return startDateComparison || left.end_date.localeCompare(right.end_date);
+        });
+};
+
 const getCurrentPromotions = async (req, res, next) => {
     try {
         const currentTime = getNewZealandTime();
-        const { Promotion_Channels, Promotions, Channels } = models.active;
+        const {
+            Promotions,
+            Channels,
+            Promotion_Channels,
+        } = models.active;
 
-        const promotionChannels = await Promotion_Channels.findAll({
-            attributes: apiFields.Promotion_Channels,
+        const activePromotionChannels = await Promotion_Channels.findAll({
+            attributes: [
+                "promotion_id",
+                "channel_code",
+                [fn("DATE_FORMAT", col("start_date"), "%Y-%m-%d"), "start_date"],
+                [fn("DATE_FORMAT", col("end_date"), "%Y-%m-%d"), "end_date"],
+            ],
             where: {
                 start_date: {
                     [Op.lte]: currentTime,
@@ -23,16 +76,18 @@ const getCurrentPromotions = async (req, res, next) => {
                 ["start_date", "DESC"],
                 ["id", "ASC"],
             ],
+            raw: true,
         });
 
-        if (promotionChannels.length === 0) {
+        if (activePromotionChannels.length === 0) {
             return sendSuccess(req, res, {
                 data: [],
             });
         }
 
-        const promotionIds = [...new Set(promotionChannels.map((item) => item.promotion_id))];
-        const channelCodes = [...new Set(promotionChannels.map((item) => item.channel_code))];
+        const promotionIds = [...new Set(activePromotionChannels.map((item) => item.promotion_id))];
+        const sortedPromotionIds = [...promotionIds].sort((left, right) => Number(right) - Number(left));
+        const channelCodes = [...new Set(activePromotionChannels.map((item) => item.channel_code))];
 
         const [promotions, channels] = await Promise.all([
             Promotions.findAll({
@@ -42,30 +97,47 @@ const getCurrentPromotions = async (req, res, next) => {
                         [Op.in]: promotionIds,
                     },
                 },
+                raw: true,
             }),
             Channels.findAll({
-                attributes: apiFields.Channels,
+                attributes: ["code", "name"],
                 where: {
                     code: {
                         [Op.in]: channelCodes,
                     },
                 },
+                raw: true,
             }),
         ]);
 
-        const promotionMap = new Map(promotions.map((item) => [String(item.id), item.toJSON()]));
-        const channelMap = new Map(channels.map((item) => [String(item.code), item.toJSON()]));
+        const promotionMap = new Map(promotions.map((item) => [String(item.id), item]));
+        const channelMap = new Map(channels.map((item) => [String(item.code), item]));
+        const channelAvailabilityByPromotion = new Map();
 
-        const data = promotionChannels.map((item) => ({
-            promotion: promotionMap.get(String(item.promotion_id)) || null,
-            channel: channelMap.get(String(item.channel_code)) || null,
-            availability: {
-                id: item.id,
-                start_date: item.start_date,
-                end_date: item.end_date,
-                redeem_end_date: item.redeem_end_date,
-            },
-        }));
+        activePromotionChannels.forEach((item) => {
+            const promotionId = String(item.promotion_id);
+            if (!channelAvailabilityByPromotion.has(promotionId)) {
+                channelAvailabilityByPromotion.set(promotionId, new Map());
+            }
+            channelAvailabilityByPromotion.get(promotionId).set(String(item.channel_code), item);
+        });
+
+        const data = sortedPromotionIds.flatMap((promotionIdValue) => {
+            const promotionId = String(promotionIdValue);
+            const promotion = promotionMap.get(promotionId);
+            if (!promotion) return [];
+
+            const availabilityMap = channelAvailabilityByPromotion.get(promotionId) || new Map();
+            const promotionChannelData = groupChannelsByDate(availabilityMap, channelMap);
+
+            return [{
+                title: promotion.name,
+                gifts: promotion.description,
+                url: promotion.slug_url,
+                banner: promotion.banner_url,
+                channels: promotionChannelData,
+            }];
+        });
 
         return sendSuccess(req, res, {
             data,
