@@ -1,3 +1,5 @@
+const moment = require("moment-timezone");
+
 const MAORI_LETTERS = "A-Za-zĀāĒēĪīŌōŪū";
 
 const createValidator = (name, validate, options = {}) => ({
@@ -140,11 +142,11 @@ const oneOf = (allowedValues, message) => createValidator("oneOf", (value) => {
 const date = (message = "Must be a valid date.") => createValidator("date", (value) => {
     if (isEmptyValue(value)) return { valid: true };
 
-    const parsed = new Date(value);
+    const valid = moment(String(value), moment.ISO_8601, true).isValid();
 
-    return Number.isNaN(parsed.getTime())
-        ? { valid: false, message }
-        : { valid: true, value };
+    return valid
+        ? { valid: true, value: String(value) }
+        : { valid: false, message };
 });
 
 const url = (message = "Must be a valid URL.") => createValidator("url", (value) => {

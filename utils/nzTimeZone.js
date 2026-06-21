@@ -10,7 +10,22 @@ function getNewZealandTimestamp() {
   return moment().tz(NZ_TIME_ZONE).format();
 }
 
+function toNewZealandDateTime(value) {
+  const input = String(value || "").trim();
+  if (!input) return null;
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(input)) {
+    return `${input} 00:00:00`;
+  }
+
+  const parsed = moment.parseZone(input, moment.ISO_8601, true);
+  if (!parsed.isValid()) return null;
+
+  return parsed.tz(NZ_TIME_ZONE).format("YYYY-MM-DD HH:mm:ss");
+}
+
 module.exports = {
   getNewZealandTime,
   getNewZealandTimestamp,
+  toNewZealandDateTime,
 };
