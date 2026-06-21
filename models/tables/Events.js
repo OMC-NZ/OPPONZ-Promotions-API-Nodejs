@@ -12,8 +12,8 @@ module.exports = (sequelize) => {
             type: DataTypes.STRING(255),
             allowNull: false,
         },
-        description: {
-            type: DataTypes.TEXT,
+        terms_url: {
+            type: DataTypes.STRING(255),
             allowNull: false,
         },
         banner_url: {
@@ -27,6 +27,12 @@ module.exports = (sequelize) => {
         requires_imei: {
             type: DataTypes.TINYINT(1),
             allowNull: false,
+            defaultValue: 1,
+        },
+        requires_channel: {
+            type: DataTypes.TINYINT(1),
+            allowNull: false,
+            defaultValue: 1,
         },
         start_date: {
             type: DataTypes.DATE,

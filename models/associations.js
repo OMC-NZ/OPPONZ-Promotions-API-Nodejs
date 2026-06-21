@@ -1,12 +1,14 @@
 const configureAssociations = (models) => {
     const {
         Promotions,
+        Events,
         Gifts,
         Channels,
         Devices,
         Promotion_Gifts,
         Promotion_Devices,
         Promotion_Channels,
+        Event_Channels,
     } = models;
 
     Promotions.hasMany(Promotion_Gifts, {
@@ -99,6 +101,41 @@ const configureAssociations = (models) => {
         foreignKey: "channel_code",
         targetKey: "code",
         as: "channel",
+    });
+
+    Events.hasMany(Event_Channels, {
+        foreignKey: "event_id",
+        sourceKey: "id",
+        as: "eventChannels",
+    });
+    Event_Channels.belongsTo(Events, {
+        foreignKey: "event_id",
+        targetKey: "id",
+        as: "event",
+    });
+
+    Channels.hasMany(Event_Channels, {
+        foreignKey: "channel_code",
+        sourceKey: "code",
+        as: "eventChannels",
+    });
+    Event_Channels.belongsTo(Channels, {
+        foreignKey: "channel_code",
+        targetKey: "code",
+        as: "channel",
+    });
+
+    Events.belongsToMany(Channels, {
+        through: Event_Channels,
+        foreignKey: "event_id",
+        otherKey: "channel_code",
+        as: "channels",
+    });
+    Channels.belongsToMany(Events, {
+        through: Event_Channels,
+        foreignKey: "channel_code",
+        otherKey: "event_id",
+        as: "events",
     });
 };
 

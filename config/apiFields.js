@@ -49,11 +49,13 @@ const apiFields = {
         "reset_at",
     ],
     Events: [
+        "id",
         "name",
-        "description",
+        "terms_url",
         "banner_url",
         "slug_url",
         "requires_imei",
+        "requires_channel",
         "start_date",
         "end_date",
     ],
@@ -63,6 +65,10 @@ const apiFields = {
         "customer_id",
         "status",
         "extra_data",
+    ],
+    Event_Channels: [
+        "event_id",
+        "channel_code",
     ],
     Event_Models: [
         "event_id",

@@ -1,6 +1,7 @@
 const express = require("express");
 const healthRoutes = require("./healthRoutes");
 const promotionsRoutes = require("./promotionsRoutes");
+const eventsRoutes = require("./eventsRoutes");
 const recaptchaRoutes = require("./recaptchaRoutes");
 const {
     defaultRateLimiter,
@@ -16,6 +17,10 @@ router.use("/api/health", healthRateLimiter, healthRoutes);
 // GET  /api/promotions/current
 // POST /api/promotions/verify-imei-purchase
 router.use("/api/promotions", promotionsRoutes);
+
+// Events endpoints:
+// GET /api/events/current
+router.use("/api/events", eventsRoutes);
 
 router.use("/api/recaptcha", recaptchaRateLimiter, recaptchaRoutes);
 router.use(defaultRateLimiter);
