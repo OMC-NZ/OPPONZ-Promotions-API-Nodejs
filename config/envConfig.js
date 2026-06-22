@@ -115,7 +115,7 @@ module.exports = {
         internalApiKeys: parseList(process.env.INTERNAL_API_KEYS),
     },
     recaptcha: {
-        secretKey: process.env.RECAPTCHA_SECRET_KEY,
+        secretKey: process.env.RECAPTCHA_SECRET_KEY_V3,
         minScore: parseNumber(process.env.RECAPTCHA_MIN_SCORE, 0.3),
     },
     rateLimit: {

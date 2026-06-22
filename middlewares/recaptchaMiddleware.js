@@ -4,6 +4,7 @@ const { sendError } = require("../utils/apiResponse");
 
 const getTokenFromRequest = (req) => {
     return String(
+        req.body?.recaptcha_token ||
         req.body?.recaptchaToken ||
         req.body?.token ||
         req.get("x-recaptcha-token") ||
@@ -14,7 +15,7 @@ const getTokenFromRequest = (req) => {
 const requireRecaptcha = (options = {}) => {
     return async (req, res, next) => {
         const token = getTokenFromRequest(req);
-        const expectedAction = options.action || req.body?.action;
+        const expectedAction = options.action || req.body?.recaptcha_action || req.body?.action;
 
         try {
             const verification = await verifyRecaptchaToken({
@@ -28,6 +29,8 @@ const requireRecaptcha = (options = {}) => {
                     message: verification.message,
                     score: verification.score,
                     action: verification.action,
+                    errors: verification.errors,
+                    failureReason: verification.failureReason,
                 });
 
                 return sendError(req, res, {
@@ -37,6 +40,12 @@ const requireRecaptcha = (options = {}) => {
                     debug: {
                         score: verification.score,
                         action: verification.action,
+                        errors: verification.errors,
+                        expectedAction: verification.expectedAction,
+                        googleSuccess: verification.googleSuccess,
+                        scoreAccepted: verification.scoreAccepted,
+                        actionMatches: verification.actionMatches,
+                        failureReason: verification.failureReason,
                     },
                 });
             }

@@ -64,7 +64,7 @@ const verifyRecaptchaToken = async ({ token, expectedAction }) => {
     }
 
     if (!config.recaptcha.secretKey) {
-        console.error("RECAPTCHA_SECRET_KEY is not configured.");
+        console.error("RECAPTCHA_SECRET_KEY_V3 is not configured.");
         return {
             verified: false,
             status: 500,
@@ -73,9 +73,23 @@ const verifyRecaptchaToken = async ({ token, expectedAction }) => {
     }
 
     const result = await postSiteVerify(token);
-    const score = typeof result.score === "number" ? result.score : 0;
+    const googleSuccess = result.success === true;
+    const scorePresent = typeof result.score === "number";
+    const score = scorePresent ? result.score : 0;
+    const scoreAccepted = scorePresent && score >= config.recaptcha.minScore;
     const actionMatches = !expectedAction || result.action === expectedAction;
-    const verified = result.success === true && score >= config.recaptcha.minScore && actionMatches;
+    const verified = googleSuccess && scoreAccepted && actionMatches;
+    let failureReason;
+
+    if (!googleSuccess) {
+        failureReason = "GOOGLE_REJECTED_TOKEN";
+    } else if (!scorePresent) {
+        failureReason = "RECAPTCHA_SCORE_MISSING";
+    } else if (!scoreAccepted) {
+        failureReason = "RECAPTCHA_SCORE_TOO_LOW";
+    } else if (!actionMatches) {
+        failureReason = "RECAPTCHA_ACTION_MISMATCH";
+    }
 
     return {
         verified,
@@ -84,6 +98,11 @@ const verifyRecaptchaToken = async ({ token, expectedAction }) => {
         score: result.score,
         action: result.action,
         errors: result["error-codes"],
+        expectedAction,
+        googleSuccess,
+        scoreAccepted,
+        actionMatches,
+        failureReason,
     };
 };
 

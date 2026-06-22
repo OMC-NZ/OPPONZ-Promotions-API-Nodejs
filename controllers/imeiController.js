@@ -24,6 +24,8 @@ const verifyImei = async (req, res, next) => {
             Promotion_Devices,
             Promotion_Channels,
             Promotions,
+            Promotion_Gifts,
+            Gifts,
         } = models.active;
 
         const device = await Devices.findOne({
@@ -95,29 +97,71 @@ const verifyImei = async (req, res, next) => {
             return sendIneligibleResult(req, res);
         }
 
-        const promotions = await Promotions.findAll({
-            attributes: ["id", "name", "description", "banner_url", "slug_url"],
-            where: {
-                id: {
-                    [Op.in]: eligiblePromotionIds,
+        const [promotions, promotionGifts] = await Promise.all([
+            Promotions.findAll({
+                attributes: ["id", "name", "description", "banner_url", "slug_url"],
+                where: {
+                    id: {
+                        [Op.in]: eligiblePromotionIds,
+                    },
                 },
-            },
-            raw: true,
-        });
+                raw: true,
+            }),
+            Promotion_Gifts.findAll({
+                attributes: ["promotion_id", "gift_id"],
+                where: {
+                    promotion_id: {
+                        [Op.in]: eligiblePromotionIds,
+                    },
+                },
+                raw: true,
+            }),
+        ]);
+
+        const giftIds = [...new Set(promotionGifts.map((item) => item.gift_id))];
+        const gifts = giftIds.length === 0
+            ? []
+            : await Gifts.findAll({
+                attributes: ["id", "name", "alias", "color"],
+                where: {
+                    id: {
+                        [Op.in]: giftIds,
+                    },
+                },
+                raw: true,
+            });
 
         const promotionMap = new Map(promotions.map((item) => [String(item.id), item]));
+        const giftMap = new Map(gifts.map((item) => [String(item.id), item]));
+        const giftIdsByPromotion = new Map();
+
+        promotionGifts.forEach((item) => {
+            const promotionId = String(item.promotion_id);
+            if (!giftIdsByPromotion.has(promotionId)) giftIdsByPromotion.set(promotionId, new Set());
+            giftIdsByPromotion.get(promotionId).add(String(item.gift_id));
+        });
 
         const eligiblePromotions = eligiblePromotionIds.flatMap((promotionIdValue) => {
             const promotionId = String(promotionIdValue);
             const promotion = promotionMap.get(promotionId);
             if (!promotion) return [];
 
+            const promotionGiftData = [...(giftIdsByPromotion.get(promotionId) || new Set())]
+                .map((giftId) => giftMap.get(giftId))
+                .filter(Boolean)
+                .map((gift) => ({
+                    name: gift.name,
+                    alias: gift.alias,
+                    color: gift.color,
+                }));
+
             return [{
                 promotion_id: promotion.id,
                 title: promotion.name,
                 description: promotion.description,
-                banner_url: process.env.PROMOTIONS_PUBLIC_ASSETS_URL + '/banners/Events/imgs/' + promotion.banner_url,
+                banner_url: process.env.PROMOTIONS_PUBLIC_ASSETS_URL + '/banners/Promotions/' + promotion.banner_url,
                 slug_url: promotion.slug_url,
+                gifts: promotionGiftData,
             }];
         });
 

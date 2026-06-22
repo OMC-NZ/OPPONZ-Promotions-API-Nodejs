@@ -106,7 +106,7 @@ const checkProductionSecurityConfig = () => {
 
   if (isBlank(config.recaptcha.secretKey)) {
     warnings.push({
-      key: "RECAPTCHA_SECRET_KEY",
+      key: "RECAPTCHA_SECRET_KEY_V3",
       message: "forms using reCAPTCHA will fail until this is configured.",
     });
   }
