@@ -27,8 +27,15 @@ const getCurrentEvents = async (req, res, next) => {
             raw: true,
         });
 
+        const eventsWithBannerUrls = events.map((event) => ({
+            ...event,
+            banner_url: process.env.PROMOTIONS_PUBLIC_ASSETS_URL
+                + "/banners/Events/imgs/"
+                + event.banner_url,
+        }));
+
         return sendSuccess(req, res, {
-            data: events,
+            data: eventsWithBannerUrls,
         });
     } catch (error) {
         error.status = 500;

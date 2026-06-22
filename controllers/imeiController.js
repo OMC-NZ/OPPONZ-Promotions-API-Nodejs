@@ -116,7 +116,7 @@ const verifyImei = async (req, res, next) => {
                 promotion_id: promotion.id,
                 title: promotion.name,
                 description: promotion.description,
-                banner_url: promotion.banner_url,
+                banner_url: process.env.PROMOTIONS_PUBLIC_ASSETS_URL + '/banners/Events/imgs/' + promotion.banner_url,
                 slug_url: promotion.slug_url,
             }];
         });
