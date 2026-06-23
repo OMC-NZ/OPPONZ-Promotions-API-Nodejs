@@ -110,6 +110,13 @@ module.exports = {
         bannerTID: process.env.ONEDRIVE_BANES_TENANT_ID || process.env.ONEDRIVE_BANNERS_TENANT_ID,
         redirectURI: process.env.ONEDRIVE_REDIRECT_URI,
     },
+    nzPost: {
+        tokenUrl: process.env.NZ_POST_TOKEN_URL || "https://oauth.nzpost.co.nz/as/token.oauth2",
+        clientId: process.env.NZ_POST_CLIENT_ID,
+        clientSecret: process.env.NZ_POST_CLIENT_SECRET,
+        tokenRefreshBufferSeconds: parseInteger(process.env.NZ_POST_TOKEN_REFRESH_BUFFER_SECONDS, 60),
+        tokenFallbackTtlSeconds: parseInteger(process.env.NZ_POST_TOKEN_FALLBACK_TTL_SECONDS, 30 * 60),
+    },
     common: {
         tokenSecret: process.env.TOKEN_SECRET,
         internalApiKeys: parseList(process.env.INTERNAL_API_KEYS),

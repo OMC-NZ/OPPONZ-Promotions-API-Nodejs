@@ -3,6 +3,7 @@ const healthRoutes = require("./healthRoutes");
 const promotionsRoutes = require("./promotionsRoutes");
 const eventsRoutes = require("./eventsRoutes");
 const recaptchaRoutes = require("./recaptchaRoutes");
+const nzPostRoutes = require("./nzPostRoutes");
 const {
     defaultRateLimiter,
     healthRateLimiter,
@@ -23,6 +24,11 @@ router.use("/api/promotions", promotionsRoutes);
 router.use("/api/events", eventsRoutes);
 
 router.use("/api/recaptcha", recaptchaRateLimiter, recaptchaRoutes);
+
+// NZ Post endpoints:
+// GET /api/nzpost/token
+router.use("/api/nzpost", recaptchaRateLimiter, nzPostRoutes);
+
 router.use(defaultRateLimiter);
 
 module.exports = router;
