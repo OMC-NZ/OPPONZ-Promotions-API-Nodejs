@@ -10,8 +10,19 @@ const jsonRateLimitHandler = (req, res) => {
 
     return sendError(req, res, {
         statusCode: 429,
-        message: "Too many requests. Please try again later.",
+        message: "You have tried too many times. Please wait a moment and try again.",
         code: "RATE_LIMIT_EXCEEDED",
+    });
+};
+
+const skipRateLimiter = (req, res, next) => next();
+
+const createRateLimiter = (options) => {
+    if (!config.rateLimit.enabled) return skipRateLimiter;
+
+    return rateLimit({
+        ...commonRateLimitOptions,
+        ...options,
     });
 };
 
@@ -21,32 +32,27 @@ const commonRateLimitOptions = {
     handler: jsonRateLimitHandler,
 };
 
-const defaultRateLimiter = rateLimit({
-    ...commonRateLimitOptions,
+const defaultRateLimiter = createRateLimiter({
     windowMs: config.rateLimit.windowMs,
     limit: config.rateLimit.max,
 });
 
-const publicReadRateLimiter = rateLimit({
-    ...commonRateLimitOptions,
+const publicReadRateLimiter = createRateLimiter({
     windowMs: config.rateLimit.publicWindowMs,
     limit: config.rateLimit.publicMax,
 });
 
-const writeRateLimiter = rateLimit({
-    ...commonRateLimitOptions,
+const writeRateLimiter = createRateLimiter({
     windowMs: config.rateLimit.writeWindowMs,
     limit: config.rateLimit.writeMax,
 });
 
-const recaptchaRateLimiter = rateLimit({
-    ...commonRateLimitOptions,
+const recaptchaRateLimiter = createRateLimiter({
     windowMs: config.rateLimit.recaptchaWindowMs,
     limit: config.rateLimit.recaptchaMax,
 });
 
-const healthRateLimiter = rateLimit({
-    ...commonRateLimitOptions,
+const healthRateLimiter = createRateLimiter({
     windowMs: config.rateLimit.healthWindowMs,
     limit: config.rateLimit.healthMax,
 });

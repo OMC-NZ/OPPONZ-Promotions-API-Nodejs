@@ -1,4 +1,4 @@
-const { Op } = require("sequelize");
+const { Op, fn, col } = require("sequelize");
 const { models } = require("../models");
 const { getNewZealandTime, toNewZealandDateTime } = require("../utils/nzTimeZone");
 const { sendSuccess } = require("../utils/apiResponse");
@@ -21,6 +21,7 @@ const verifyImei = async (req, res, next) => {
         const purchaseDate = toNewZealandDateTime(purchaseDateInput);
         const {
             Devices,
+            Channels,
             Promotion_Devices,
             Promotion_Channels,
             Promotions,
@@ -57,7 +58,12 @@ const verifyImei = async (req, res, next) => {
         }
 
         const promotionChannels = await Promotion_Channels.findAll({
-            attributes: ["promotion_id"],
+            attributes: [
+                "promotion_id",
+                "channel_code",
+                [fn("DATE_FORMAT", col("start_date"), "%d %b %Y"), "start_date"],
+                [fn("DATE_FORMAT", col("end_date"), "%d %b %Y"), "end_date"],
+            ],
             where: {
                 promotion_id: {
                     [Op.in]: modelPromotionIds,
@@ -97,7 +103,9 @@ const verifyImei = async (req, res, next) => {
             return sendIneligibleResult(req, res);
         }
 
-        const [promotions, promotionGifts] = await Promise.all([
+        const channelCodes = [...new Set(promotionChannels.map((item) => item.channel_code))];
+
+        const [promotions, promotionGifts, channels] = await Promise.all([
             Promotions.findAll({
                 attributes: ["id", "name", "description", "banner_url", "slug_url"],
                 where: {
@@ -112,6 +120,15 @@ const verifyImei = async (req, res, next) => {
                 where: {
                     promotion_id: {
                         [Op.in]: eligiblePromotionIds,
+                    },
+                },
+                raw: true,
+            }),
+            Channels.findAll({
+                attributes: ["code", "name"],
+                where: {
+                    code: {
+                        [Op.in]: channelCodes,
                     },
                 },
                 raw: true,
@@ -132,14 +149,33 @@ const verifyImei = async (req, res, next) => {
             });
 
         const promotionMap = new Map(promotions.map((item) => [String(item.id), item]));
+        const channelMap = new Map(channels.map((item) => [String(item.code), item]));
         const giftMap = new Map(gifts.map((item) => [String(item.id), item]));
+        const channelAvailabilityByPromotion = new Map();
         const giftIdsByPromotion = new Map();
+
+        promotionChannels.forEach((item) => {
+            channelAvailabilityByPromotion.set(String(item.promotion_id), item);
+        });
 
         promotionGifts.forEach((item) => {
             const promotionId = String(item.promotion_id);
             if (!giftIdsByPromotion.has(promotionId)) giftIdsByPromotion.set(promotionId, new Set());
             giftIdsByPromotion.get(promotionId).add(String(item.gift_id));
         });
+
+        const getPromotionChannelData = (promotionId) => {
+            const availability = channelAvailabilityByPromotion.get(promotionId);
+            if (!availability) return null;
+
+            const channel = channelMap.get(String(availability.channel_code));
+            const channelName = channel?.name || availability.channel_code;
+
+            return {
+                name: channelName,
+                period: `${availability.start_date} - ${availability.end_date}`,
+            };
+        };
 
         const eligiblePromotions = eligiblePromotionIds.flatMap((promotionIdValue) => {
             const promotionId = String(promotionIdValue);
@@ -158,6 +194,7 @@ const verifyImei = async (req, res, next) => {
             return [{
                 promotion_id: promotion.id,
                 title: promotion.name,
+                channel: getPromotionChannelData(promotionId),
                 description: promotion.description,
                 banner_url: process.env.PROMOTIONS_PUBLIC_ASSETS_URL + '/banners/Promotions/' + promotion.banner_url,
                 slug_url: promotion.slug_url,

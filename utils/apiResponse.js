@@ -10,7 +10,7 @@ const DEFAULT_ERROR_MESSAGES = {
     405: "Method Not Allowed",
     409: "Conflict",
     413: "Payload Too Large",
-    429: "Too Many Requests",
+    429: "You have tried too many times. Please wait a moment and try again.",
     500: "Internal Server Error",
     502: "Bad Gateway",
     503: "Service Unavailable",
