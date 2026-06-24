@@ -52,11 +52,6 @@ const recaptchaRateLimiter = createRateLimiter({
     limit: config.rateLimit.recaptchaMax,
 });
 
-const healthRateLimiter = createRateLimiter({
-    windowMs: config.rateLimit.healthWindowMs,
-    limit: config.rateLimit.healthMax,
-});
-
 const getClientIp = (req) => {
     return req.ip || req.socket?.remoteAddress || "";
 };
@@ -91,7 +86,6 @@ module.exports = {
     publicReadRateLimiter,
     writeRateLimiter,
     recaptchaRateLimiter,
-    healthRateLimiter,
     getClientIp,
     getIpDebugInfo,
     enforceHttps,

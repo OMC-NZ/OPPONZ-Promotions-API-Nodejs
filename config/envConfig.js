@@ -130,7 +130,5 @@ module.exports = {
         writeMax: parseInteger(process.env.WRITE_RATE_LIMIT_MAX, 10),
         recaptchaWindowMs: parseInteger(process.env.RECAPTCHA_RATE_LIMIT_WINDOW_MS, 15 * 60 * 1000),
         recaptchaMax: parseInteger(process.env.RECAPTCHA_RATE_LIMIT_MAX, 20),
-        healthWindowMs: parseInteger(process.env.HEALTH_RATE_LIMIT_WINDOW_MS, 60 * 1000),
-        healthMax: parseInteger(process.env.HEALTH_RATE_LIMIT_MAX, 120),
     },
 };

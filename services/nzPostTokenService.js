@@ -5,13 +5,6 @@ const config = require("../config/envConfig");
 let cachedToken = null;
 let pendingTokenRequest = null;
 
-const maskToken = (token) => {
-    if (!token || typeof token !== "string") return token;
-    if (token.length <= 10) return "********";
-
-    return `${token.slice(0, 4)}...${token.slice(-4)}`;
-};
-
 const getTokenExpiry = (tokenResponse) => {
     const expiresIn = Number.parseInt(tokenResponse.expires_in, 10);
     const ttlSeconds = Number.isNaN(expiresIn) ? config.nzPost.tokenFallbackTtlSeconds : expiresIn;
@@ -90,10 +83,6 @@ const postTokenRequest = () => {
     });
 };
 
-const fetchNZPostTokenResponse = async () => {
-    return postTokenRequest();
-};
-
 const saveTokenToCache = (tokenResponse) => {
     if (!tokenResponse || !tokenResponse.access_token) {
         throw new Error("NZ Post token response does not include access_token.");
@@ -133,26 +122,7 @@ const clearNZPostTokenCache = () => {
     cachedToken = null;
 };
 
-const getNZPostTokenCacheInfo = () => {
-    if (!cachedToken) {
-        return {
-            cached: false,
-        };
-    }
-
-    return {
-        cached: true,
-        tokenType: cachedToken.tokenType,
-        accessToken: maskToken(cachedToken.accessToken),
-        expiresAt: new Date(cachedToken.expiresAt).toISOString(),
-        expiresInSeconds: Math.max(0, Math.floor((cachedToken.expiresAt - Date.now()) / 1000)),
-        responseFields: Object.keys(cachedToken.rawResponse || {}),
-    };
-};
-
 module.exports = {
-    fetchNZPostTokenResponse,
     getNZPostAccessToken,
     clearNZPostTokenCache,
-    getNZPostTokenCacheInfo,
 };

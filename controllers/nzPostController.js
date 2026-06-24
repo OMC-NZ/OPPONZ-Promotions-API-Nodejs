@@ -1,49 +1,8 @@
-const config = require("../config/envConfig");
 const {
     autocompleteNZPostAddress,
     searchNZPostAddresses,
 } = require("../services/nzPostAddressService");
-const { getNZPostAccessToken } = require("../services/nzPostTokenService");
 const { sendSuccess, sendError } = require("../utils/apiResponse");
-
-const getNZPostToken = async (req, res) => {
-    try {
-        const token = await getNZPostAccessToken();
-        const tokenResponse = token.rawResponse || {};
-        const responseFields = Object.keys(tokenResponse || {});
-        const expiresInSeconds = Math.max(0, Math.floor((token.expiresAt - Date.now()) / 1000));
-
-        if (config.environment === "production") {
-            return sendSuccess(req, res, {
-                data: {
-                    token_type: token.tokenType,
-                    expires_at: new Date(token.expiresAt).toISOString(),
-                    expires_in_seconds: expiresInSeconds,
-                    response_fields: responseFields,
-                },
-            });
-        }
-
-        return sendSuccess(req, res, {
-            data: {
-                ...tokenResponse,
-                expires_at: new Date(token.expiresAt).toISOString(),
-                expires_in_seconds: expiresInSeconds,
-            },
-        });
-    } catch (error) {
-        console.error("Error getting NZ Post token:", error);
-        return sendError(req, res, {
-            statusCode: error.statusCode || 502,
-            message: "Failed to get NZ Post token.",
-            code: "NZ_POST_TOKEN_ERROR",
-            debug: {
-                message: error.message,
-                response: error.response,
-            },
-        });
-    }
-};
 
 const searchNZPostAddressesController = async (req, res) => {
     try {
@@ -103,6 +62,5 @@ const autocompleteNZPostAddressController = async (req, res) => {
 
 module.exports = {
     autocompleteNZPostAddress: autocompleteNZPostAddressController,
-    getNZPostToken,
     searchNZPostAddresses: searchNZPostAddressesController,
 };

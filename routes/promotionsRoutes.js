@@ -10,7 +10,11 @@ const { publicReadRateLimiter, writeRateLimiter } = require("../config/securityC
 const router = express.Router();
 
 router.route("/current")
-    .get(publicReadRateLimiter, getCurrentPromotions)
+    .get(
+        publicReadRateLimiter,
+        requireRecaptcha({ action: "promotions_current" }),
+        getCurrentPromotions
+    )
     .all(methodNotAllowed(["GET"]));
 
 router.route("/verify-imei-purchase")
