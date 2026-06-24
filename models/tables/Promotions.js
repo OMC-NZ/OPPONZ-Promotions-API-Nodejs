@@ -24,6 +24,10 @@ module.exports = (sequelize) => {
             type: DataTypes.STRING(255),
             allowNull: false,
         },
+        terms_url: {
+            type: DataTypes.STRING(255),
+            allowNull: false,
+        },
         updated_at: {
             type: DataTypes.DATE,
             allowNull: false,

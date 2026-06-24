@@ -107,7 +107,7 @@ const verifyImei = async (req, res, next) => {
 
         const [promotions, promotionGifts, channels] = await Promise.all([
             Promotions.findAll({
-                attributes: ["id", "name", "description", "banner_url", "slug_url"],
+                attributes: ["id", "name", "description", "banner_url", "slug_url", "terms_url"],
                 where: {
                     id: {
                         [Op.in]: eligiblePromotionIds,
@@ -198,6 +198,7 @@ const verifyImei = async (req, res, next) => {
                 description: promotion.description,
                 banner_url: process.env.PROMOTIONS_PUBLIC_ASSETS_URL + '/banners/Promotions/' + promotion.banner_url,
                 slug_url: promotion.slug_url,
+                termsURL: promotion.terms_url,
                 gifts: promotionGiftData,
             }];
         });

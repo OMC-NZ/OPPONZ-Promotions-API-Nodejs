@@ -85,6 +85,7 @@ const apiFields = {
         "description",
         "banner_url",
         "slug_url",
+        "terms_url",
     ],
     Promotion_Channels: [
         "promotion_id",

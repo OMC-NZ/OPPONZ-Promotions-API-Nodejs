@@ -134,6 +134,7 @@ const getCurrentPromotions = async (req, res, next) => {
                 title: promotion.name,
                 gifts: promotion.description,
                 url: promotion.slug_url,
+                termsURL: promotion.terms_url,
                 banner: process.env.PROMOTIONS_PUBLIC_ASSETS_URL + '/banners/Promotions/' + promotion.banner_url,
                 channels: promotionChannelData,
             }];
