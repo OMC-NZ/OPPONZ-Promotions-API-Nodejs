@@ -27,6 +27,8 @@ router.use("/api/recaptcha", recaptchaRateLimiter, recaptchaRoutes);
 
 // NZ Post endpoints:
 // GET /api/nzpost/token
+// GET /api/nzpost/address/search?q=PO%20Box%20194
+// GET /api/nzpost/address/autocomplete?dpid=1104285
 router.use("/api/nzpost", recaptchaRateLimiter, nzPostRoutes);
 
 router.use(defaultRateLimiter);

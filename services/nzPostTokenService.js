@@ -121,8 +121,8 @@ const refreshNZPostToken = async () => {
     return pendingTokenRequest;
 };
 
-const getNZPostAccessToken = async () => {
-    if (isCachedTokenValid()) {
+const getNZPostAccessToken = async (options = {}) => {
+    if (!options.forceRefresh && isCachedTokenValid()) {
         return cachedToken;
     }
 
