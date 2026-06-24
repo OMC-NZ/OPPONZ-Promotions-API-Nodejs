@@ -77,7 +77,12 @@ const requestAddressSearch = async (requestUrl) => {
     }
 };
 
-const pickAddressDetailFields = (address) => ({
+const getFirstNonNullField = (addresses, fieldName) => {
+    const matchedAddress = addresses.find((address) => address?.[fieldName] !== null && address?.[fieldName] !== undefined);
+    return matchedAddress ? matchedAddress[fieldName] : null;
+};
+
+const pickAddressDetailFields = (address, addresses) => ({
     BoxBagType: address?.BoxBagType,
     BoxBagNumber: address?.BoxBagNumber,
     UnitType: address?.UnitType,
@@ -87,10 +92,10 @@ const pickAddressDetailFields = (address) => ({
     RoadName: address?.RoadName,
     RoadTypeName: address?.RoadTypeName,
     RoadSuffixName: address?.RoadSuffixName,
-    Suburb: address?.Suburb,
+    Suburb: getFirstNonNullField(addresses, "Suburb"),
     Lobby: address?.Lobby,
-    CityTown: address?.CityTown,
-    RuralDelivery: address?.RuralDelivery,
+    CityTown: getFirstNonNullField(addresses, "CityTown"),
+    RuralDelivery: getFirstNonNullField(addresses, "RuralDelivery"),
     Postcode: address?.Postcode,
 });
 
@@ -131,15 +136,16 @@ const autocompleteNZPostAddress = async ({ dpid }) => {
     requestUrl.searchParams.set("dpid", trimmedDpid);
 
     const response = await requestAddressSearch(requestUrl);
-    const address = Array.isArray(response.details)
-        ? response.details[0]
+    const addresses = Array.isArray(response.details)
+        ? response.details
         : Array.isArray(response.addresses)
-            ? response.addresses[0]
-            : response.address || response.details || response;
+            ? response.addresses
+            : [response.address || response.details || response].filter(Boolean);
+    const address = addresses.find((item) => item?.RuralDelivery !== null) || addresses[0];
 
     return {
         status: response.status,
-        address: pickAddressDetailFields(address),
+        address: address ? pickAddressDetailFields(address, addresses) : null,
     };
 };
 
