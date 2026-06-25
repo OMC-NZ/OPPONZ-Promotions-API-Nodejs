@@ -1,5 +1,6 @@
 const { Op, fn, col } = require("sequelize");
 const { models } = require("../models");
+const { findEligiblePromotionIdsForDevice } = require("../services/promotionEligibilityService");
 const { getNewZealandTime, toNewZealandDateTime } = require("../utils/nzTimeZone");
 const { sendSuccess } = require("../utils/apiResponse");
 
@@ -22,7 +23,6 @@ const verifyImei = async (req, res, next) => {
         const {
             Devices,
             Channels,
-            Promotion_Devices,
             Promotion_Channels,
             Promotions,
             Promotion_Gifts,
@@ -43,17 +43,13 @@ const verifyImei = async (req, res, next) => {
             return sendIneligibleResult(req, res);
         }
 
-        const promotionDevices = await Promotion_Devices.findAll({
-            attributes: ["promotion_id"],
-            where: {
-                eligible_model: device.model,
-            },
-            raw: true,
+        const eligiblePromotionIds = await findEligiblePromotionIdsForDevice({
+            device,
+            purchaseDate,
+            requestTime,
         });
 
-        const modelPromotionIds = [...new Set(promotionDevices.map((item) => item.promotion_id))];
-
-        if (modelPromotionIds.length === 0) {
+        if (eligiblePromotionIds.length === 0) {
             return sendIneligibleResult(req, res);
         }
 
@@ -66,7 +62,7 @@ const verifyImei = async (req, res, next) => {
             ],
             where: {
                 promotion_id: {
-                    [Op.in]: modelPromotionIds,
+                    [Op.in]: eligiblePromotionIds,
                 },
                 channel_code: device.channel_code,
                 [Op.and]: [
@@ -94,14 +90,6 @@ const verifyImei = async (req, res, next) => {
             },
             raw: true,
         });
-
-        const eligiblePromotionIds = [
-            ...new Set(promotionChannels.map((item) => item.promotion_id)),
-        ].sort((left, right) => Number(right) - Number(left));
-
-        if (eligiblePromotionIds.length === 0) {
-            return sendIneligibleResult(req, res);
-        }
 
         const channelCodes = [...new Set(promotionChannels.map((item) => item.channel_code))];
 

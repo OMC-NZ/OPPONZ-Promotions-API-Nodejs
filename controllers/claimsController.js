@@ -1,13 +1,63 @@
 const crypto = require("crypto");
-const { Op } = require("sequelize");
 const { sequelize, models } = require("../models");
+const { checkPromotionEligibility } = require("../services/promotionEligibilityService");
 const { getNewZealandTime, toNewZealandDateTime } = require("../utils/nzTimeZone");
 const { sendSuccess, sendError } = require("../utils/apiResponse");
 
 const CLAIM_STATUS_PENDING = 0;
 const DEVICE_REDEMPTION_STATUS_CLAIMED = 1;
+const CLAIM_ID_PREFIX = "OPNZPROCLM";
+const CLAIM_ID_RANDOM_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 
 const normalizeText = (value) => String(value || "").trim();
+
+const formatGiftName = (gift) => {
+    return [gift.name, gift.color]
+        .map(normalizeText)
+        .filter(Boolean)
+        .join(" ");
+};
+
+const replaceFileNameWithUuid = (fileUrl) => {
+    const value = normalizeText(fileUrl);
+    const queryIndex = value.search(/[?#]/);
+    const pathPart = queryIndex === -1 ? value : value.slice(0, queryIndex);
+    const suffix = queryIndex === -1 ? "" : value.slice(queryIndex);
+    const slashIndex = Math.max(pathPart.lastIndexOf("/"), pathPart.lastIndexOf("\\"));
+    const directory = slashIndex === -1 ? "" : pathPart.slice(0, slashIndex + 1);
+    const fileName = slashIndex === -1 ? pathPart : pathPart.slice(slashIndex + 1);
+    const dotIndex = fileName.lastIndexOf(".");
+    const extension = dotIndex === -1 ? "" : fileName.slice(dotIndex);
+
+    return `${directory}${crypto.randomUUID()}${extension}${suffix}`;
+};
+
+const getClaimIdDatePart = (newZealandDateTime) => {
+    return `${newZealandDateTime.slice(2, 4)}${newZealandDateTime.slice(5, 7)}${newZealandDateTime.slice(8, 10)}`;
+};
+
+const generateClaimIdRandomPart = () => {
+    const randomBytes = crypto.randomBytes(8);
+
+    return [...randomBytes]
+        .map((byte) => CLAIM_ID_RANDOM_ALPHABET[byte % CLAIM_ID_RANDOM_ALPHABET.length])
+        .join("");
+};
+
+const generateClaimId = (newZealandDateTime) => {
+    return `${CLAIM_ID_PREFIX}-${getClaimIdDatePart(newZealandDateTime)}-${generateClaimIdRandomPart()}`;
+};
+
+const generateUniqueClaimId = async (Claims, newZealandDateTime, transaction) => {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+        const claimId = generateClaimId(newZealandDateTime);
+        const existingClaim = await Claims.findByPk(claimId, { transaction });
+
+        if (!existingClaim) return claimId;
+    }
+
+    throw new Error("Failed to generate a unique claim ID.");
+};
 
 const submitClaim = async (req, res, next) => {
     const transaction = await sequelize.transaction();
@@ -35,6 +85,8 @@ const submitClaim = async (req, res, next) => {
         const city = normalizeText(req.body.city || req.body.CityTown);
         const now = getNewZealandTime();
         const purchaseDate = toNewZealandDateTime(purchaseDateInput);
+        const storedReceiptUrl = replaceFileNameWithUuid(receiptUrl);
+        const storedScreenshotUrl = replaceFileNameWithUuid(screenshotUrl);
 
         if (!selectedGiftAlias) {
             await transaction.rollback();
@@ -42,6 +94,9 @@ const submitClaim = async (req, res, next) => {
                 statusCode: 400,
                 message: "Gift alias is required.",
                 code: "GIFT_ALIAS_REQUIRED",
+                includeRequestId: false,
+                includeCode: false,
+                includeDebug: false,
             });
         }
 
@@ -49,89 +104,33 @@ const submitClaim = async (req, res, next) => {
             Customers,
             Claims,
             Deliver_Addresses,
-            Devices,
-            Gifts,
-            Promotions,
-            Promotion_Gifts,
             Claim_Gifts,
         } = models.active;
 
-        const [promotion, device, gift] = await Promise.all([
-            Promotions.findByPk(promotionId, { transaction }),
-            Devices.findOne({
-                where: { imei },
-                transaction,
-                lock: true,
-            }),
-            Gifts.findOne({
-                where: { alias: selectedGiftAlias },
-                transaction,
-            }),
-        ]);
-
-        if (!promotion) {
-            await transaction.rollback();
-            return sendError(req, res, {
-                statusCode: 404,
-                message: "Promotion not found.",
-                code: "PROMOTION_NOT_FOUND",
-            });
-        }
-
-        if (!device) {
-            await transaction.rollback();
-            return sendError(req, res, {
-                statusCode: 404,
-                message: "Device not found.",
-                code: "DEVICE_NOT_FOUND",
-            });
-        }
-
-        if (Number(device.redemption_status) !== 0) {
-            await transaction.rollback();
-            return sendError(req, res, {
-                statusCode: 409,
-                message: "This IMEI has already been used for a claim.",
-                code: "IMEI_ALREADY_CLAIMED",
-            });
-        }
-
-        if (!gift) {
-            await transaction.rollback();
-            return sendError(req, res, {
-                statusCode: 404,
-                message: "Gift not found.",
-                code: "GIFT_NOT_FOUND",
-            });
-        }
-
-        const promotionGift = await Promotion_Gifts.findOne({
-            where: {
-                promotion_id: promotionId,
-                gift_id: gift.id,
-            },
+        const eligibility = await checkPromotionEligibility({
+            imei,
+            purchaseDateInput,
+            promotionId,
+            giftAlias: selectedGiftAlias,
             transaction,
         });
 
-        if (!promotionGift) {
+        if (!eligibility.eligible) {
             await transaction.rollback();
             return sendError(req, res, {
                 statusCode: 400,
-                message: "Selected gift is not available for this promotion.",
-                code: "GIFT_NOT_AVAILABLE_FOR_PROMOTION",
+                message: "Submission failed. Please check your details and submit again.",
+                code: "CLAIM_ELIGIBILITY_ERROR",
+                includeRequestId: false,
+                includeCode: false,
+                includeDebug: false,
             });
         }
 
+        const { device, gift } = eligibility;
+
         const duplicateClaim = await Claims.findOne({
-            where: {
-                [Op.or]: [
-                    { imei },
-                    {
-                        promotion_id: promotionId,
-                        receipt_url: receiptUrl,
-                    },
-                ],
-            },
+            where: { imei },
             transaction,
         });
 
@@ -139,8 +138,11 @@ const submitClaim = async (req, res, next) => {
             await transaction.rollback();
             return sendError(req, res, {
                 statusCode: 409,
-                message: "This claim appears to have already been submitted.",
+                message: "Submission failed. Please check your details and submit again.",
                 code: "DUPLICATE_CLAIM",
+                includeRequestId: false,
+                includeCode: false,
+                includeDebug: false,
             });
         }
 
@@ -151,7 +153,7 @@ const submitClaim = async (req, res, next) => {
             contact,
             updated_at: now,
         }, { transaction });
-        const claimId = crypto.randomUUID();
+        const claimId = await generateUniqueClaimId(Claims, now, transaction);
 
         await Claims.create({
             id: claimId,
@@ -160,8 +162,8 @@ const submitClaim = async (req, res, next) => {
             customer_id: customer.id,
             purchase_date: purchaseDate,
             status: CLAIM_STATUS_PENDING,
-            receipt_url: receiptUrl,
-            screenshot_url: screenshotUrl,
+            receipt_url: storedReceiptUrl,
+            screenshot_url: storedScreenshotUrl,
             updated_at: now,
         }, { transaction });
 
@@ -190,23 +192,19 @@ const submitClaim = async (req, res, next) => {
 
         return sendSuccess(req, res, {
             statusCode: 201,
+            includeRequestId: false,
             data: {
                 claim_id: claimId,
-                customer_id: customer.id,
-                promotion_id: Number(promotionId),
-                imei,
-                gift: {
-                    id: gift.id,
-                    alias: gift.alias,
-                    name: gift.name,
-                    color: gift.color,
-                },
+                gift: formatGiftName(gift),
             },
         });
     } catch (error) {
         await transaction.rollback();
         error.status = 500;
         error.publicMessage = "Failed to submit claim.";
+        error.includeRequestId = false;
+        error.includeCode = false;
+        error.includeDebug = false;
         return next(error);
     }
 };

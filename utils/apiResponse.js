@@ -26,15 +26,21 @@ const sendSuccess = (req, res, options = {}) => {
     const statusCode = options.statusCode || 200;
     const payload = {
         success: true,
-        data: options.data === undefined ? null : options.data,
-        requestId: req.requestId,
     };
+
+    if (options.data !== undefined && options.includeData !== false) {
+        payload.data = options.data;
+    }
+
+    if (options.includeRequestId !== false) {
+        payload.requestId = req.requestId;
+    }
 
     if (options.message) {
         payload.message = options.message;
     }
 
-    if (options.meta) {
+    if (options.meta && options.includeMeta !== false) {
         payload.meta = options.meta;
     }
 
@@ -48,14 +54,17 @@ const sendError = (req, res, options = {}) => {
     const payload = {
         success: false,
         message: shouldExposeErrorMessage(statusCode) ? requestedMessage : fallbackMessage,
-        requestId: req.requestId,
     };
 
-    if (options.code) {
+    if (options.includeRequestId !== false) {
+        payload.requestId = req.requestId;
+    }
+
+    if (options.code && options.includeCode !== false) {
         payload.code = options.code;
     }
 
-    if (!isProduction && options.debug) {
+    if (!isProduction && options.debug && options.includeDebug !== false) {
         payload.debug = options.debug;
     }
 

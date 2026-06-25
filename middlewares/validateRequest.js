@@ -104,8 +104,11 @@ const validateRequest = (schema = {}, options = {}) => {
         if (errors.length > 0) {
             return sendError(req, res, {
                 statusCode: 400,
-                message: "Bad Request",
-                code: "VALIDATION_ERROR",
+                message: options.message || "Bad Request",
+                code: options.code || "VALIDATION_ERROR",
+                includeRequestId: options.includeRequestId,
+                includeCode: options.includeCode,
+                includeDebug: options.includeDebug,
                 debug: {
                     errors: redactSensitiveData(errors),
                 },

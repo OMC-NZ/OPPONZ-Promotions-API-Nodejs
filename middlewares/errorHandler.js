@@ -56,6 +56,9 @@ const errorHandler = (error, req, res, next) => {
         statusCode: status,
         message: error.publicMessage || error.message || "Request failed.",
         code: error.code,
+        includeRequestId: error.includeRequestId,
+        includeCode: error.includeCode,
+        includeDebug: error.includeDebug,
         debug: {
             message: error.message,
             location,

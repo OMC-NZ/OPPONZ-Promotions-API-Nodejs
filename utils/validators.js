@@ -1,6 +1,17 @@
 const moment = require("moment-timezone");
 
-const MAORI_LETTERS = "A-Za-zĀāĒēĪīŌōŪū";
+const MAORI_LETTERS = "A-Za-z\\u0100\\u0112\\u012A\\u014C\\u016A\\u0101\\u0113\\u012B\\u014D\\u016B";
+const NAME_PATTERN = new RegExp(`^[${MAORI_LETTERS}]+(?: [${MAORI_LETTERS}]+)*$`);
+const DEFAULT_ALLOWED_FILE_EXTENSIONS = [
+    ".jpg",
+    ".jpeg",
+    ".png",
+    ".gif",
+    ".webp",
+    ".heic",
+    ".heif",
+    ".pdf",
+];
 
 const createValidator = (name, validate, options = {}) => ({
     name,
@@ -34,7 +45,7 @@ const email = (message = "Must be a valid email address.") => createValidator("e
 const imei = (message = "IMEI must be a 15-digit number starting with 86.") => createValidator("imei", (value) => {
     if (isEmptyValue(value)) return { valid: true };
 
-    const text = String(value).trim();
+    const text = String(value).replace(/\s+/g, "").trim();
     const valid = /^86\d{13}$/.test(text);
 
     return valid
@@ -45,7 +56,7 @@ const imei = (message = "IMEI must be a 15-digit number starting with 86.") => c
 const contact = (message = "Contact must contain digits only.") => createValidator("contact", (value) => {
     if (isEmptyValue(value)) return { valid: true };
 
-    const text = String(value).trim();
+    const text = String(value).replace(/\s+/g, "").trim();
     const valid = /^\d+$/.test(text);
 
     return valid
@@ -69,6 +80,12 @@ const uppercaseFirstLetter = (word) => {
     return `${word.charAt(0).toLocaleUpperCase("en-NZ")}${word.slice(1).toLocaleLowerCase("en-NZ")}`;
 };
 
+const titleCaseLetters = (value) => {
+    return String(value)
+        .toLocaleLowerCase("en-NZ")
+        .replace(new RegExp(`[${MAORI_LETTERS}]+`, "g"), uppercaseFirstLetter);
+};
+
 const titleCaseWords = (value) => {
     return String(value)
         .trim()
@@ -77,15 +94,16 @@ const titleCaseWords = (value) => {
         .map((word) => {
             if (!new RegExp(`[${MAORI_LETTERS}]`).test(word)) return word;
 
-            return word.replace(new RegExp(`[${MAORI_LETTERS}]+`, "g"), uppercaseFirstLetter);
+            return titleCaseLetters(word);
         })
         .join(" ");
 };
 
 const titleCaseStreet = (value) => {
-    return titleCaseWords(value).replace(/(\d)([a-zāēīōū])/gi, (match, number, letter) => {
-        return `${number}${letter.toLocaleUpperCase("en-NZ")}`;
-    });
+    return titleCaseWords(value).replace(
+        new RegExp(`(\\d)([a-z\\u0101\\u0113\\u012B\\u014D\\u016B])`, "gi"),
+        (match, number, letter) => `${number}${letter.toLocaleUpperCase("en-NZ")}`
+    );
 };
 
 const maoriEnglishName = () => {
@@ -93,8 +111,11 @@ const maoriEnglishName = () => {
         if (isEmptyValue(value)) return { valid: true };
 
         const normalized = titleCaseWords(value);
+        const valid = NAME_PATTERN.test(normalized);
 
-        return { valid: true, value: normalized };
+        return valid
+            ? { valid: true, value: normalized }
+            : { valid: false, message: "Invalid format." };
     });
 };
 
@@ -105,6 +126,14 @@ const street = () => {
         const normalized = titleCaseStreet(value);
 
         return { valid: true, value: normalized };
+    });
+};
+
+const titleCaseText = () => {
+    return createValidator("titleCaseText", (value) => {
+        if (isEmptyValue(value)) return { valid: true };
+
+        return { valid: true, value: titleCaseWords(value) };
     });
 };
 
@@ -160,6 +189,30 @@ const url = (message = "Must be a valid URL.") => createValidator("url", (value)
     }
 });
 
+const fileExtension = (
+    allowedExtensions = DEFAULT_ALLOWED_FILE_EXTENSIONS,
+    message = "Unsupported file type."
+) => createValidator("fileExtension", (value) => {
+    if (isEmptyValue(value)) return { valid: true };
+
+    const text = String(value).trim();
+    const queryIndex = text.search(/[?#]/);
+    const pathPart = queryIndex === -1 ? text : text.slice(0, queryIndex);
+    const fileName = pathPart.split(/[\\/]/).pop() || "";
+    const dotIndex = fileName.lastIndexOf(".");
+
+    if (dotIndex <= 0) {
+        return { valid: false, message };
+    }
+
+    const extension = fileName.slice(dotIndex).toLowerCase();
+    const valid = allowedExtensions.map((item) => item.toLowerCase()).includes(extension);
+
+    return valid
+        ? { valid: true, value: text }
+        : { valid: false, message };
+});
+
 module.exports = {
     required,
     optional,
@@ -169,11 +222,13 @@ module.exports = {
     postcode,
     maoriEnglishName,
     street,
+    titleCaseText,
     stringLength,
     integer,
     oneOf,
     date,
     url,
+    fileExtension,
     titleCaseWords,
     titleCaseStreet,
 };
