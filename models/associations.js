@@ -9,6 +9,10 @@ const configureAssociations = (models) => {
         Promotion_Devices,
         Promotion_Channels,
         Event_Channels,
+        Customers,
+        Claims,
+        Claim_Gifts,
+        Deliver_Addresses,
     } = models;
 
     Promotions.hasMany(Promotion_Gifts, {
@@ -136,6 +140,85 @@ const configureAssociations = (models) => {
         foreignKey: "channel_code",
         otherKey: "event_id",
         as: "events",
+    });
+
+    Customers.hasMany(Claims, {
+        foreignKey: "customer_id",
+        sourceKey: "id",
+        as: "claims",
+    });
+    Claims.belongsTo(Customers, {
+        foreignKey: "customer_id",
+        targetKey: "id",
+        as: "customer",
+    });
+
+    Devices.hasMany(Claims, {
+        foreignKey: "imei",
+        sourceKey: "imei",
+        as: "claims",
+    });
+    Claims.belongsTo(Devices, {
+        foreignKey: "imei",
+        targetKey: "imei",
+        as: "device",
+    });
+
+    Promotions.hasMany(Claims, {
+        foreignKey: "promotion_id",
+        sourceKey: "id",
+        as: "claims",
+    });
+    Claims.belongsTo(Promotions, {
+        foreignKey: "promotion_id",
+        targetKey: "id",
+        as: "promotion",
+    });
+
+    Claims.hasMany(Claim_Gifts, {
+        foreignKey: "claim_id",
+        sourceKey: "id",
+        as: "claimGifts",
+    });
+    Claim_Gifts.belongsTo(Claims, {
+        foreignKey: "claim_id",
+        targetKey: "id",
+        as: "claim",
+    });
+
+    Gifts.hasMany(Claim_Gifts, {
+        foreignKey: "gift_id",
+        sourceKey: "id",
+        as: "claimGifts",
+    });
+    Claim_Gifts.belongsTo(Gifts, {
+        foreignKey: "gift_id",
+        targetKey: "id",
+        as: "gift",
+    });
+
+    Claims.belongsToMany(Gifts, {
+        through: Claim_Gifts,
+        foreignKey: "claim_id",
+        otherKey: "gift_id",
+        as: "gifts",
+    });
+    Gifts.belongsToMany(Claims, {
+        through: Claim_Gifts,
+        foreignKey: "gift_id",
+        otherKey: "claim_id",
+        as: "claims",
+    });
+
+    Claims.hasMany(Deliver_Addresses, {
+        foreignKey: "claim_id",
+        sourceKey: "id",
+        as: "deliverAddresses",
+    });
+    Deliver_Addresses.belongsTo(Claims, {
+        foreignKey: "claim_id",
+        targetKey: "id",
+        as: "claim",
     });
 };
 

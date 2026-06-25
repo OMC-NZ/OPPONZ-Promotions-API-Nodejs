@@ -1,6 +1,7 @@
 const express = require("express");
 const fs = require("fs");
 const path = require("path");
+const claimsRoutes = require("./claimsRoutes");
 const promotionsRoutes = require("./promotionsRoutes");
 const eventsRoutes = require("./eventsRoutes");
 const nzPostRoutes = require("./nzPostRoutes");
@@ -30,6 +31,10 @@ router.use("/api/promotions", promotionsRoutes);
 // GET /api/events/current
 //   reCAPTCHA: x-recaptcha-token header, action=events_current
 router.use("/api/events", eventsRoutes);
+
+// Claim endpoints:
+// POST /api/claims
+router.use("/api/claims", claimsRoutes);
 
 // NZ Post endpoints:
 // GET /api/nzpost/address/search?q=PO%20Box%20194
