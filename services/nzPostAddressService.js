@@ -87,6 +87,7 @@ const pickAddressDetailFields = (address, addresses) => ({
     BoxBagNumber: address?.BoxBagNumber,
     UnitType: address?.UnitType,
     UnitValue: address?.UnitValue,
+    Floor: address?.Floor,
     StreetNumber: address?.StreetNumber,
     StreetAlpha: address?.StreetAlpha,
     RoadName: address?.RoadName,
