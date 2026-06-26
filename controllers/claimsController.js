@@ -63,37 +63,63 @@ const submitClaim = async (req, res, next) => {
     const transaction = await sequelize.transaction();
 
     try {
+        const promotionId = req.body.promotion_id ?? req.body.promotionId;
+        const purchaseDateInput = req.body.purchase_date ?? req.body.purchaseDate;
+        const receiptUrl = req.body.receipt_url ?? req.body.receiptUrl;
+        const screenshotUrl = req.body.screenshot_url ?? req.body.screenshotUrl;
+        const firstName = req.body.first_name ?? req.body.firstName;
+        const lastName = req.body.last_name ?? req.body.lastName;
         const {
-            promotion_id: promotionId,
             imei,
-            purchase_date: purchaseDateInput,
-            receipt_url: receiptUrl,
-            screenshot_url: screenshotUrl,
-            first_name: firstName,
-            last_name: lastName,
             email,
             contact,
             street,
             suburb,
             postcode,
             instructions,
-            gift_alias: giftAlias,
-            giftAlias: giftAliasCamel,
             alias,
         } = req.body;
-        const selectedGiftAlias = giftAlias || giftAliasCamel || alias;
+        const selectedGiftAlias = req.body.gift_alias || req.body.giftAlias || alias;
         const city = normalizeText(req.body.city || req.body.CityTown);
         const now = getNewZealandTime();
         const purchaseDate = toNewZealandDateTime(purchaseDateInput);
+        const missingFields = [
+            ["promotion_id", promotionId],
+            ["imei", imei],
+            ["purchase_date", purchaseDateInput],
+            ["receipt_url", receiptUrl],
+            ["screenshot_url", screenshotUrl],
+            ["first_name", firstName],
+            ["last_name", lastName],
+            ["email", email],
+            ["contact", contact],
+            ["street", street],
+            ["suburb", suburb],
+            ["city", city],
+            ["postcode", postcode],
+            ["gift_alias", selectedGiftAlias],
+        ].filter(([, value]) => value === undefined || value === null || value === "");
         const storedReceiptUrl = replaceFileNameWithUuid(receiptUrl);
         const storedScreenshotUrl = replaceFileNameWithUuid(screenshotUrl);
 
-        if (!selectedGiftAlias) {
+        if (missingFields.length > 0) {
             await transaction.rollback();
             return sendError(req, res, {
                 statusCode: 400,
-                message: "Gift alias is required.",
-                code: "GIFT_ALIAS_REQUIRED",
+                message: "Submission failed. Please check your details and submit again.",
+                code: "CLAIM_REQUIRED_FIELDS_MISSING",
+                includeRequestId: false,
+                includeCode: false,
+                includeDebug: false,
+            });
+        }
+
+        if (!purchaseDate) {
+            await transaction.rollback();
+            return sendError(req, res, {
+                statusCode: 400,
+                message: "Submission failed. Please check your details and submit again.",
+                code: "CLAIM_INVALID_PURCHASE_DATE",
                 includeRequestId: false,
                 includeCode: false,
                 includeDebug: false,
@@ -128,23 +154,6 @@ const submitClaim = async (req, res, next) => {
         }
 
         const { device, gift } = eligibility;
-
-        const duplicateClaim = await Claims.findOne({
-            where: { imei },
-            transaction,
-        });
-
-        if (duplicateClaim) {
-            await transaction.rollback();
-            return sendError(req, res, {
-                statusCode: 409,
-                message: "Submission failed. Please check your details and submit again.",
-                code: "DUPLICATE_CLAIM",
-                includeRequestId: false,
-                includeCode: false,
-                includeDebug: false,
-            });
-        }
 
         const customer = await Customers.create({
             first_name: firstName,

@@ -121,7 +121,6 @@ module.exports = {
         minScore: parseNumber(process.env.RECAPTCHA_MIN_SCORE, 0.3),
     },
     rateLimit: {
-        enabled: parseBoolean(process.env.RATE_LIMIT_ENABLED, runtimeEnvironment !== "development"),
         windowMs: parseInteger(process.env.RATE_LIMIT_WINDOW_MS, 15 * 60 * 1000),
         max: parseInteger(process.env.RATE_LIMIT_MAX, 200),
         publicWindowMs: parseInteger(process.env.PUBLIC_RATE_LIMIT_WINDOW_MS, 15 * 60 * 1000),

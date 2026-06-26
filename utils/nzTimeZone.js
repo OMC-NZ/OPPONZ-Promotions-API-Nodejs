@@ -19,7 +19,18 @@ function toNewZealandDateTime(value) {
   }
 
   const parsed = moment.parseZone(input, moment.ISO_8601, true);
-  if (!parsed.isValid()) return null;
+  if (!parsed.isValid()) {
+    const displayDate = moment.tz(input, [
+      "D MMM YYYY",
+      "DD MMM YYYY",
+      "D MMMM YYYY",
+      "DD MMMM YYYY",
+    ], true, NZ_TIME_ZONE);
+
+    return displayDate.isValid()
+      ? displayDate.format("YYYY-MM-DD HH:mm:ss")
+      : null;
+  }
 
   return parsed.tz(NZ_TIME_ZONE).format("YYYY-MM-DD HH:mm:ss");
 }

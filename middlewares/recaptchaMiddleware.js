@@ -1,3 +1,4 @@
+const { isRecaptchaEnabled } = require("../config/securityFeatureConfig");
 const { verifyRecaptchaToken } = require("../services/recaptchaService");
 const { logSecurityEvent } = require("../services/securityLogService");
 const { sendError } = require("../utils/apiResponse");
@@ -14,8 +15,20 @@ const getTokenFromRequest = (req) => {
 
 const requireRecaptcha = (options = {}) => {
     return async (req, res, next) => {
+        if (!isRecaptchaEnabled()) {
+            req.recaptcha = {
+                verified: true,
+                bypassed: true,
+                expectedAction: options.action || req.body?.recaptcha_action || req.body?.recaptchaAction || req.body?.action,
+            };
+            return next();
+        }
+
         const token = getTokenFromRequest(req);
-        const expectedAction = options.action || req.body?.recaptcha_action || req.body?.action;
+        const expectedAction = options.action ||
+            req.body?.recaptcha_action ||
+            req.body?.recaptchaAction ||
+            req.body?.action;
 
         try {
             const verification = await verifyRecaptchaToken({

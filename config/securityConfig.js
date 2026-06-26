@@ -15,11 +15,7 @@ const jsonRateLimitHandler = (req, res) => {
     });
 };
 
-const skipRateLimiter = (req, res, next) => next();
-
 const createRateLimiter = (options) => {
-    if (!config.rateLimit.enabled) return skipRateLimiter;
-
     return rateLimit({
         ...commonRateLimitOptions,
         ...options,
