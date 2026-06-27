@@ -13,6 +13,8 @@ const configureAssociations = (models) => {
         Claims,
         Claim_Gifts,
         Deliver_Addresses,
+        Deliveries,
+        Track_Trace,
     } = models;
 
     Promotions.hasMany(Promotion_Gifts, {
@@ -219,6 +221,28 @@ const configureAssociations = (models) => {
         foreignKey: "claim_id",
         targetKey: "id",
         as: "claim",
+    });
+
+    Claims.hasMany(Deliveries, {
+        foreignKey: "claim_id",
+        sourceKey: "id",
+        as: "deliveries",
+    });
+    Deliveries.belongsTo(Claims, {
+        foreignKey: "claim_id",
+        targetKey: "id",
+        as: "claim",
+    });
+
+    Deliver_Addresses.hasMany(Track_Trace, {
+        foreignKey: "address_id",
+        sourceKey: "id",
+        as: "trackTraces",
+    });
+    Track_Trace.belongsTo(Deliver_Addresses, {
+        foreignKey: "address_id",
+        targetKey: "id",
+        as: "deliveryAddress",
     });
 };
 

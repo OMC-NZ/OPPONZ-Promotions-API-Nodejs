@@ -101,7 +101,10 @@ module.exports = {
         port: parseInteger(process.env.EMAIL_PORT, undefined),
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS,
-        adminEmail: process.env.ADMIN_EMAIL,
+        from: process.env.EMAIL_FROM,
+        serviceEmail: process.env.EMAIL_USER,
+        trackingUrl: process.env.CLAIM_TRACKING_URL || "https://oppopromotions.co.nz",
+        adminEmail: process.env.EMAIL_ADMIN || process.env.EMAIL_ADMIN,
         alertCooldownMs: parseInteger(process.env.ERROR_ALERT_COOLDOWN_MS, 300000),
     },
     nzPost: {

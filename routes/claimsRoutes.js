@@ -1,5 +1,5 @@
 const express = require("express");
-const { submitClaim } = require("../controllers/claimsController");
+const { getClaimStatus, submitClaim } = require("../controllers/claimsController");
 const { methodNotAllowed } = require("../middlewares/routeSecurity");
 const { requireRecaptcha } = require("../middlewares/recaptchaMiddleware");
 const { validateRequest } = require("../middlewares/validateRequest");
@@ -11,6 +11,7 @@ const {
     maoriEnglishName,
     optional,
     postcode,
+    required,
     stringLength,
     street,
     titleCaseText,
@@ -18,6 +19,26 @@ const {
 const { writeRateLimiter } = require("../config/securityConfig");
 
 const router = express.Router();
+
+router.route("/status")
+    .post(
+        writeRateLimiter,
+        validateRequest({
+            body: {
+                claim_id: [required(), stringLength({ max: 255 })],
+                email: [required(), email(), stringLength({ max: 100 })],
+            },
+        }, {
+            allowUnknown: true,
+            message: "Claim details could not be verified.",
+            code: "CLAIM_STATUS_VALIDATION_ERROR",
+            includeRequestId: false,
+            includeCode: false,
+            includeDebug: false,
+        }),
+        getClaimStatus
+    )
+    .all(methodNotAllowed(["POST"]));
 
 router.route("/")
     .post(

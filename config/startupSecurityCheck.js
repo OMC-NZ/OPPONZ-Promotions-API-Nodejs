@@ -92,8 +92,8 @@ const checkProductionSecurityConfig = () => {
 
   if (isBlank(config.email.adminEmail)) {
     warnings.push({
-      key: "ADMIN_EMAIL",
-      message: "production error alert emails will not be sent without ADMIN_EMAIL.",
+      key: "EMAIL_ADMIN",
+      message: "production error alert emails will not be sent without EMAIL_ADMIN.",
     });
   }
 

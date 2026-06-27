@@ -35,6 +35,11 @@ module.exports = (sequelize) => {
             type: DataTypes.STRING(255),
             allowNull: false,
         },
+        email_status: {
+            type: DataTypes.TINYINT(1),
+            allowNull: false,
+            defaultValue: 0,
+        },
         updated_at: {
             type: DataTypes.DATE,
             allowNull: false,

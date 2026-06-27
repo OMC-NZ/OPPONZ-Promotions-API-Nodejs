@@ -1,10 +1,15 @@
 const crypto = require("crypto");
 const { sequelize, models } = require("../models");
+const {
+    EMAIL_STATUS_FAILED,
+    queueClaimConfirmationEmail,
+} = require("../services/claimConfirmationEmailService");
 const { checkPromotionEligibility } = require("../services/promotionEligibilityService");
 const { getNewZealandTime, toNewZealandDateTime } = require("../utils/nzTimeZone");
 const { sendSuccess, sendError } = require("../utils/apiResponse");
 
 const CLAIM_STATUS_PENDING = 0;
+const CLAIM_STATUS_SHIPPED = 2;
 const DEVICE_REDEMPTION_STATUS_CLAIMED = 1;
 const CLAIM_ID_PREFIX = "OPNZPROCLM";
 const CLAIM_ID_RANDOM_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -57,6 +62,103 @@ const generateUniqueClaimId = async (Claims, newZealandDateTime, transaction) =>
     }
 
     throw new Error("Failed to generate a unique claim ID.");
+};
+
+const getCurrentTrackLink = (deliverAddresses = []) => {
+    const currentAddresses = deliverAddresses
+        .filter((address) => Number(address.is_current) === 1)
+        .sort((a, b) => Number(b.id) - Number(a.id));
+    const addresses = currentAddresses.length > 0 ? currentAddresses : deliverAddresses;
+
+    for (const address of addresses) {
+        const trackTraces = [...(address.trackTraces || [])]
+            .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+        const trackTrace = trackTraces.find((item) => item.track_link);
+
+        if (trackTrace) return trackTrace.track_link;
+    }
+
+    return null;
+};
+
+const getClaimStatus = async (req, res, next) => {
+    try {
+        const claimId = normalizeText(req.body.claim_id);
+        const email = normalizeText(req.body.email).toLowerCase();
+        const {
+            Claims,
+            Customers,
+            Deliver_Addresses,
+            Track_Trace,
+        } = models.active;
+
+        if (!claimId) {
+            return sendSuccess(req, res, {
+                includeRequestId: false,
+                data: {
+                    verified: false,
+                },
+                message: "Claim details could not be verified.",
+            });
+        }
+
+        const claim = await Claims.findByPk(claimId, {
+            attributes: ["id", "status", "customer_id"],
+            include: [
+                {
+                    model: Customers,
+                    as: "customer",
+                    attributes: ["email"],
+                    required: true,
+                },
+                {
+                    model: Deliver_Addresses,
+                    as: "deliverAddresses",
+                    attributes: ["id", "is_current"],
+                    required: false,
+                    include: [
+                        {
+                            model: Track_Trace,
+                            as: "trackTraces",
+                            attributes: ["track_link", "created_at"],
+                            required: false,
+                        },
+                    ],
+                },
+            ],
+        });
+
+        if (!claim || normalizeText(claim.customer?.email).toLowerCase() !== email) {
+            return sendSuccess(req, res, {
+                includeRequestId: false,
+                data: {
+                    verified: false,
+                },
+                message: "Claim details could not be verified.",
+            });
+        }
+
+        const data = {
+            verified: true,
+            status: claim.status,
+        };
+
+        if (Number(claim.status) === CLAIM_STATUS_SHIPPED) {
+            data.track_link = getCurrentTrackLink(claim.deliverAddresses);
+        }
+
+        return sendSuccess(req, res, {
+            includeRequestId: false,
+            data,
+        });
+    } catch (error) {
+        error.status = 500;
+        error.publicMessage = "Failed to retrieve claim status.";
+        error.includeRequestId = false;
+        error.includeCode = false;
+        error.includeDebug = false;
+        return next(error);
+    }
 };
 
 const submitClaim = async (req, res, next) => {
@@ -173,6 +275,7 @@ const submitClaim = async (req, res, next) => {
             status: CLAIM_STATUS_PENDING,
             receipt_url: storedReceiptUrl,
             screenshot_url: storedScreenshotUrl,
+            email_status: EMAIL_STATUS_FAILED,
             updated_at: now,
         }, { transaction });
 
@@ -198,6 +301,7 @@ const submitClaim = async (req, res, next) => {
         }, { transaction });
 
         await transaction.commit();
+        queueClaimConfirmationEmail(claimId);
 
         return sendSuccess(req, res, {
             statusCode: 201,
@@ -220,4 +324,5 @@ const submitClaim = async (req, res, next) => {
 
 module.exports = {
     submitClaim,
+    getClaimStatus,
 };
