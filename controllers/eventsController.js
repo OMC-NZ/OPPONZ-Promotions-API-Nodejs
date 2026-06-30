@@ -43,6 +43,10 @@ const getCurrentEvents = async (req, res, next) => {
     }
 };
 
+const buildEventAssetUrl = (baseUrl, path, fileName) => {
+    return `${String(baseUrl || "").replace(/\/+$/, "")}${path}${fileName}`;
+};
+
 const parseValidationJson = (value) => {
     if (!value) return null;
 
@@ -189,10 +193,16 @@ const getEventForm = async (req, res, next) => {
                 event: {
                     id: event.id,
                     name: event.name,
-                    terms_url: event.terms_url,
-                    banner_url: process.env.PROMOTIONS_PUBLIC_ASSETS_URL
-                        + "/banners/Events/imgs/"
-                        + event.banner_url,
+                    terms_url: buildEventAssetUrl(
+                        process.env.PROMOTIONS_PUBLIC_ASSETS_URL,
+                        "/banners/Events/terms/",
+                        event.terms_url
+                    ),
+                    banner_url: buildEventAssetUrl(
+                        process.env.PROMOTIONS_PUBLIC_ASSETS_URL,
+                        "/banners/Events/imgs/",
+                        event.banner_url
+                    ),
                     slug_url: event.slug_url,
                     requires_imei: event.requires_imei,
                     requires_channel: event.requires_channel,
