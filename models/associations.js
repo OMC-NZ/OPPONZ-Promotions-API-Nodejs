@@ -9,6 +9,12 @@ const configureAssociations = (models) => {
         Promotion_Devices,
         Promotion_Channels,
         Event_Channels,
+        Event_Claims,
+        Event_Models,
+        Event_Form_Sections,
+        Event_Form_Custom_Fields,
+        Event_Form_Field_Options,
+        Event_Form_Uploads,
         Customers,
         Claims,
         Claim_Gifts,
@@ -144,6 +150,72 @@ const configureAssociations = (models) => {
         as: "events",
     });
 
+    Events.hasMany(Event_Models, {
+        foreignKey: "event_id",
+        sourceKey: "id",
+        as: "eventModels",
+    });
+    Event_Models.belongsTo(Events, {
+        foreignKey: "event_id",
+        targetKey: "id",
+        as: "event",
+    });
+
+    Events.hasMany(Event_Claims, {
+        foreignKey: "event_id",
+        sourceKey: "id",
+        as: "eventClaims",
+    });
+    Event_Claims.belongsTo(Events, {
+        foreignKey: "event_id",
+        targetKey: "id",
+        as: "event",
+    });
+
+    Events.hasMany(Event_Form_Sections, {
+        foreignKey: "event_id",
+        sourceKey: "id",
+        as: "formSections",
+    });
+    Event_Form_Sections.belongsTo(Events, {
+        foreignKey: "event_id",
+        targetKey: "id",
+        as: "event",
+    });
+
+    Event_Form_Sections.hasMany(Event_Form_Custom_Fields, {
+        foreignKey: "section_id",
+        sourceKey: "id",
+        as: "customFields",
+    });
+    Event_Form_Custom_Fields.belongsTo(Event_Form_Sections, {
+        foreignKey: "section_id",
+        targetKey: "id",
+        as: "section",
+    });
+
+    Event_Form_Custom_Fields.hasMany(Event_Form_Field_Options, {
+        foreignKey: "field_id",
+        sourceKey: "id",
+        as: "options",
+    });
+    Event_Form_Field_Options.belongsTo(Event_Form_Custom_Fields, {
+        foreignKey: "field_id",
+        targetKey: "id",
+        as: "field",
+    });
+
+    Events.hasMany(Event_Form_Uploads, {
+        foreignKey: "event_id",
+        sourceKey: "id",
+        as: "formUploads",
+    });
+    Event_Form_Uploads.belongsTo(Events, {
+        foreignKey: "event_id",
+        targetKey: "id",
+        as: "event",
+    });
+
     Customers.hasMany(Claims, {
         foreignKey: "customer_id",
         sourceKey: "id",
@@ -155,12 +227,34 @@ const configureAssociations = (models) => {
         as: "customer",
     });
 
+    Customers.hasMany(Event_Claims, {
+        foreignKey: "customer_id",
+        sourceKey: "id",
+        as: "eventClaims",
+    });
+    Event_Claims.belongsTo(Customers, {
+        foreignKey: "customer_id",
+        targetKey: "id",
+        as: "customer",
+    });
+
     Devices.hasMany(Claims, {
         foreignKey: "imei",
         sourceKey: "imei",
         as: "claims",
     });
     Claims.belongsTo(Devices, {
+        foreignKey: "imei",
+        targetKey: "imei",
+        as: "device",
+    });
+
+    Devices.hasMany(Event_Claims, {
+        foreignKey: "imei",
+        sourceKey: "imei",
+        as: "eventClaims",
+    });
+    Event_Claims.belongsTo(Devices, {
         foreignKey: "imei",
         targetKey: "imei",
         as: "device",

@@ -56,6 +56,7 @@ const apiFields = {
         "slug_url",
         "requires_imei",
         "requires_channel",
+        "requires_delivery",
         "start_date",
         "end_date",
     ],
@@ -73,6 +74,32 @@ const apiFields = {
     Event_Models: [
         "event_id",
         "eligible_model",
+    ],
+    Event_Form_Sections: [
+        "event_id",
+        "section_title",
+        "sort_order",
+    ],
+    Event_Form_Custom_Fields: [
+        "section_id",
+        "field_key",
+        "field_label",
+        "field_type",
+        "placeholder",
+        "is_required",
+        "sort_order",
+        "validation_json",
+    ],
+    Event_Form_Field_Options: [
+        "field_id",
+        "option_value",
+        "option_label",
+        "sort_order",
+    ],
+    Event_Form_Uploads: [
+        "event_id",
+        "upload_key",
+        "upload_label",
     ],
     Gifts: [
         "name",

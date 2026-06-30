@@ -30,6 +30,8 @@ router.use("/api/promotions", promotionsRoutes);
 // Events endpoints:
 // GET /api/events/current
 //   reCAPTCHA: x-recaptcha-token header, action=events_current
+// GET /api/events/:slug/form
+//   reCAPTCHA: x-recaptcha-token header, action=event_form
 router.use("/api/events", eventsRoutes);
 
 // Claim endpoints:
