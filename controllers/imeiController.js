@@ -15,6 +15,105 @@ const sendIneligibleResult = (req, res) => {
     });
 };
 
+const verifyImeiChannel = async (req, res, next) => {
+    try {
+        const { imei } = req.body;
+        const slugUrl = String(req.body.slug_url || "").trim();
+        const {
+            Devices,
+            Events,
+            Event_Channels,
+            Event_Models,
+            Event_Claims,
+        } = models.active;
+
+        const [event, device, existingEventClaim] = await Promise.all([
+            Events.findOne({
+                attributes: ["id"],
+                where: { slug_url: slugUrl },
+                raw: true,
+            }),
+            Devices.findOne({
+                attributes: ["channel_code", "model"],
+                where: { imei },
+                raw: true,
+            }),
+            Event_Claims.findOne({
+                attributes: ["id"],
+                where: { imei },
+                raw: true,
+            }),
+        ]);
+
+        if (!event || !device || existingEventClaim) {
+            return sendSuccess(req, res, {
+                data: {
+                    verified: false,
+                },
+            });
+        }
+
+        if (!device.channel_code || !device.model) {
+            return sendSuccess(req, res, {
+                data: {
+                    verified: false,
+                },
+            });
+        }
+
+        const [
+            hasChannelRestriction,
+            matchingEventChannel,
+            hasModelRestriction,
+            matchingEventModel,
+        ] = await Promise.all([
+            Event_Channels.findOne({
+                attributes: ["id"],
+                where: {
+                    event_id: event.id,
+                },
+                raw: true,
+            }),
+            Event_Channels.findOne({
+                attributes: ["id"],
+                where: {
+                    event_id: event.id,
+                    channel_code: device.channel_code,
+                },
+                raw: true,
+            }),
+            Event_Models.findOne({
+                attributes: ["id"],
+                where: {
+                    event_id: event.id,
+                },
+                raw: true,
+            }),
+            Event_Models.findOne({
+                attributes: ["id"],
+                where: {
+                    event_id: event.id,
+                    eligible_model: device.model,
+                },
+                raw: true,
+            }),
+        ]);
+
+        const channelVerified = !hasChannelRestriction || Boolean(matchingEventChannel);
+        const modelVerified = !hasModelRestriction || Boolean(matchingEventModel);
+
+        return sendSuccess(req, res, {
+            data: {
+                verified: channelVerified && modelVerified,
+            },
+        });
+    } catch (error) {
+        error.status = 500;
+        error.publicMessage = "Failed to verify IMEI channel.";
+        return next(error);
+    }
+};
+
 const verifyImei = async (req, res, next) => {
     try {
         const { imei, purchase_date: purchaseDateInput } = req.body;
@@ -210,4 +309,5 @@ const verifyImei = async (req, res, next) => {
 
 module.exports = {
     verifyImei,
+    verifyImeiChannel,
 };
