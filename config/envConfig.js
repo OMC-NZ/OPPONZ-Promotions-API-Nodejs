@@ -123,6 +123,14 @@ module.exports = {
         secretKey: process.env.RECAPTCHA_SECRET_KEY_V3,
         minScore: parseNumber(process.env.RECAPTCHA_MIN_SCORE, 0.3),
     },
+    r2: {
+        endpoint: process.env.R2_ENDPOINT,
+        bucket: process.env.R2_BUCKET,
+        accessKeyId: process.env.R2_ACCESS_KEY_ID,
+        secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
+        publicBaseUrl: process.env.R2_PUBLIC_ASSETS_URL || process.env.R2_PUBLIC_BASE_URL,
+        uploadMaxBytes: parseInteger(process.env.R2_UPLOAD_MAX_BYTES, 5 * 1024 * 1024),
+    },
     rateLimit: {
         windowMs: parseInteger(process.env.RATE_LIMIT_WINDOW_MS, 15 * 60 * 1000),
         max: parseInteger(process.env.RATE_LIMIT_MAX, 200),

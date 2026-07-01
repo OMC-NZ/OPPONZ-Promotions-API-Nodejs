@@ -1,8 +1,10 @@
 const express = require("express");
+const multer = require("multer");
 const { getClaimStatus, submitClaim } = require("../controllers/claimsController");
 const { methodNotAllowed } = require("../middlewares/routeSecurity");
 const { requireRecaptcha } = require("../middlewares/recaptchaMiddleware");
 const { validateRequest } = require("../middlewares/validateRequest");
+const config = require("../config/envConfig");
 const {
     email,
     fileExtension,
@@ -19,10 +21,37 @@ const {
 const { writeRateLimiter } = require("../config/securityConfig");
 
 const router = express.Router();
+const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: {
+        fileSize: config.r2.uploadMaxBytes,
+        files: 2,
+    },
+});
+
+const parseClaimFiles = (req, res, next) => {
+    upload.fields([
+        { name: "receipt", maxCount: 1 },
+        { name: "receipt_url", maxCount: 1 },
+        { name: "receiptUrl", maxCount: 1 },
+        { name: "screenshot", maxCount: 1 },
+        { name: "screenshot_url", maxCount: 1 },
+        { name: "screenshotUrl", maxCount: 1 },
+    ])(req, res, (error) => {
+        if (!error) return next();
+
+        error.statusCode = 400;
+        error.publicMessage = error.code === "LIMIT_FILE_SIZE"
+            ? "File is too large."
+            : "Invalid file upload.";
+        return next(error);
+    });
+};
 
 router.route("/status")
     .post(
         writeRateLimiter,
+        parseClaimFiles,
         validateRequest({
             body: {
                 claim_id: [required(), stringLength({ max: 255 })],
@@ -43,6 +72,7 @@ router.route("/status")
 router.route("/")
     .post(
         writeRateLimiter,
+        parseClaimFiles,
         validateRequest({
             body: {
                 promotion_id: [optional(), integer()],

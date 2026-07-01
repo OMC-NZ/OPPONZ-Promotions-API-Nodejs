@@ -32,6 +32,8 @@ router.use("/api/promotions", promotionsRoutes);
 //   reCAPTCHA: x-recaptcha-token header, action=events_current
 // GET /api/events/:slug/form
 //   reCAPTCHA: x-recaptcha-token header, action=event_form
+// POST /api/events/:slug/claims
+//   reCAPTCHA: body recaptcha_token, body recaptcha_action=event_claim_submit
 router.use("/api/events", eventsRoutes);
 
 // Claim endpoints:

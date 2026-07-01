@@ -6,7 +6,7 @@ const { writeLog } = require("./logService");
 
 const EMAIL_STATUS_FAILED = 0;
 const EMAIL_STATUS_SENT = 1;
-const SUBJECT = "Your OPPO Promotions Claim has been received";
+const SUBJECT = "OPPONZ Promotions Claim Confirmation";
 
 let transporter;
 
@@ -104,17 +104,6 @@ const buildClaimConfirmationEmailHtml = ({
       <td align="left">
         <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#ffffff;">
           <tr>
-            <td style="padding:42px 42px 28px 42px;">
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
-                <tr>
-                  <td align="left" style="font-size:42px;line-height:1;font-weight:700;letter-spacing:2px;color:#000000;">OPPO</td>
-                  <td align="right" style="font-size:20px;line-height:1.4;color:#555555;">Claim Confirmation</td>
-                </tr>
-              </table>
-              <div style="border-top:1px solid #d9d9d9;margin-top:34px;"></div>
-            </td>
-          </tr>
-          <tr>
             <td style="padding:0 42px 42px 42px;font-size:18px;line-height:1.55;">
               <h1 style="margin:0 0 18px 0;font-size:28px;line-height:1.25;font-weight:700;color:#000000;">Hi ${safeFullName},</h1>
               <p style="margin:0 0 20px 0;">We have received your OPPO Promotions claim.</p>
@@ -176,6 +165,7 @@ const buildClaimConfirmationEmailText = ({
     "Thank you for your purchase.",
     "",
     "Warm regards,",
+    "",
     "OPPO New Zealand",
 ].join("\n");
 

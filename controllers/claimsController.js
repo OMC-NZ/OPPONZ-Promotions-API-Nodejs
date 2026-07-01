@@ -5,6 +5,7 @@ const {
     queueClaimConfirmationEmail,
 } = require("../services/claimConfirmationEmailService");
 const { checkPromotionEligibility } = require("../services/promotionEligibilityService");
+const { uploadFileToR2, validateFileForR2 } = require("../services/r2UploadService");
 const { getNewZealandTime, toNewZealandDateTime } = require("../utils/nzTimeZone");
 const { sendSuccess, sendError } = require("../utils/apiResponse");
 
@@ -16,25 +17,22 @@ const CLAIM_ID_RANDOM_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 
 const normalizeText = (value) => String(value || "").trim();
 
+const getUploadedFile = (req, fieldNames) => {
+    const names = Array.isArray(fieldNames) ? fieldNames : [fieldNames];
+
+    for (const fieldName of names) {
+        const files = req.files?.[fieldName];
+        if (Array.isArray(files) && files[0]) return files[0];
+    }
+
+    return null;
+};
+
 const formatGiftName = (gift) => {
     return [gift.name, gift.color]
         .map(normalizeText)
         .filter(Boolean)
         .join(" ");
-};
-
-const replaceFileNameWithUuid = (fileUrl) => {
-    const value = normalizeText(fileUrl);
-    const queryIndex = value.search(/[?#]/);
-    const pathPart = queryIndex === -1 ? value : value.slice(0, queryIndex);
-    const suffix = queryIndex === -1 ? "" : value.slice(queryIndex);
-    const slashIndex = Math.max(pathPart.lastIndexOf("/"), pathPart.lastIndexOf("\\"));
-    const directory = slashIndex === -1 ? "" : pathPart.slice(0, slashIndex + 1);
-    const fileName = slashIndex === -1 ? pathPart : pathPart.slice(slashIndex + 1);
-    const dotIndex = fileName.lastIndexOf(".");
-    const extension = dotIndex === -1 ? "" : fileName.slice(dotIndex);
-
-    return `${directory}${crypto.randomUUID()}${extension}${suffix}`;
 };
 
 const getClaimIdDatePart = (newZealandDateTime) => {
@@ -169,6 +167,8 @@ const submitClaim = async (req, res, next) => {
         const purchaseDateInput = req.body.purchase_date ?? req.body.purchaseDate;
         const receiptUrl = req.body.receipt_url ?? req.body.receiptUrl;
         const screenshotUrl = req.body.screenshot_url ?? req.body.screenshotUrl;
+        const receiptFile = getUploadedFile(req, ["receipt", "receipt_url", "receiptUrl"]);
+        const screenshotFile = getUploadedFile(req, ["screenshot", "screenshot_url", "screenshotUrl"]);
         const firstName = req.body.first_name ?? req.body.firstName;
         const lastName = req.body.last_name ?? req.body.lastName;
         const {
@@ -189,8 +189,8 @@ const submitClaim = async (req, res, next) => {
             ["promotion_id", promotionId],
             ["imei", imei],
             ["purchase_date", purchaseDateInput],
-            ["receipt_url", receiptUrl],
-            ["screenshot_url", screenshotUrl],
+            ["receipt", receiptUrl || receiptFile],
+            ["screenshot", screenshotUrl || screenshotFile],
             ["first_name", firstName],
             ["last_name", lastName],
             ["email", email],
@@ -201,8 +201,8 @@ const submitClaim = async (req, res, next) => {
             ["postcode", postcode],
             ["gift_alias", selectedGiftAlias],
         ].filter(([, value]) => value === undefined || value === null || value === "");
-        const storedReceiptUrl = replaceFileNameWithUuid(receiptUrl);
-        const storedScreenshotUrl = replaceFileNameWithUuid(screenshotUrl);
+        let storedReceiptUrl = normalizeText(receiptUrl);
+        let storedScreenshotUrl = normalizeText(screenshotUrl);
 
         if (missingFields.length > 0) {
             await transaction.rollback();
@@ -222,6 +222,21 @@ const submitClaim = async (req, res, next) => {
                 statusCode: 400,
                 message: "Submission failed. Please check your details and submit again.",
                 code: "CLAIM_INVALID_PURCHASE_DATE",
+                includeRequestId: false,
+                includeCode: false,
+                includeDebug: false,
+            });
+        }
+
+        try {
+            if (receiptFile) validateFileForR2(receiptFile);
+            if (screenshotFile) validateFileForR2(screenshotFile);
+        } catch (error) {
+            await transaction.rollback();
+            return sendError(req, res, {
+                statusCode: error.statusCode || 400,
+                message: "Submission failed. Please check your files and submit again.",
+                code: "CLAIM_FILE_VALIDATION_ERROR",
                 includeRequestId: false,
                 includeCode: false,
                 includeDebug: false,
@@ -255,7 +270,25 @@ const submitClaim = async (req, res, next) => {
             });
         }
 
-        const { device, gift } = eligibility;
+        const { device, gift, promotion } = eligibility;
+
+        if (receiptFile) {
+            const receiptUpload = await uploadFileToR2({
+                file: receiptFile,
+                claimType: "promotions",
+                slug: promotion.slug_url,
+            });
+            storedReceiptUrl = receiptUpload.key;
+        }
+
+        if (screenshotFile) {
+            const screenshotUpload = await uploadFileToR2({
+                file: screenshotFile,
+                claimType: "promotions",
+                slug: promotion.slug_url,
+            });
+            storedScreenshotUrl = screenshotUpload.key;
+        }
 
         const customer = await Customers.create({
             first_name: firstName,

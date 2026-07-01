@@ -283,7 +283,7 @@ const verifyImei = async (req, res, next) => {
                 title: promotion.name,
                 channel: getPromotionChannelData(promotionId),
                 description: promotion.description,
-                banner_url: process.env.PROMOTIONS_PUBLIC_ASSETS_URL + '/banners/Promotions/' + promotion.banner_url,
+                banner_url: process.env.R2_PUBLIC_ASSETS_URL + '/banners/Promotions/' + promotion.banner_url,
                 slug_url: promotion.slug_url,
                 termsURL: promotion.terms_url,
                 gifts: promotionGiftData,
