@@ -37,6 +37,28 @@ const parseEventClaimFiles = (req, res, next) => {
     });
 };
 
+const logEventFormRequest = (req, res, next) => {
+    const headerToken = String(req.get("x-recaptcha-token") || "").trim();
+    const queryToken = String(req.query.recaptcha_token || req.query.recaptchaToken || req.query.token || "").trim();
+
+    console.log("[event form request]", {
+        method: req.method,
+        path: req.originalUrl,
+        slug: req.params.slug,
+        query: req.query,
+        recaptcha: {
+            disabled: !require("../config/securityFeatureConfig").isRecaptchaEnabled(),
+            expectedAction: "event_form",
+            hasHeaderToken: Boolean(headerToken),
+            headerTokenLength: headerToken.length,
+            hasQueryToken: Boolean(queryToken),
+            queryTokenLength: queryToken.length,
+        },
+    });
+
+    return next();
+};
+
 router.route("/current")
     .get(
         publicReadRateLimiter,
@@ -100,6 +122,7 @@ router.route("/:slug/claims")
 router.route("/:slug/form")
     .get(
         publicReadRateLimiter,
+        logEventFormRequest,
         requireRecaptcha({ action: "event_form" }),
         getEventForm
     )

@@ -10,7 +10,7 @@ module.exports = (sequelize) => {
         },
         claim_id: {
             type: DataTypes.STRING(255),
-            allowNull: false,
+            allowNull: true,
         },
         street: {
             type: DataTypes.STRING(255),
@@ -35,6 +35,10 @@ module.exports = (sequelize) => {
         is_current: {
             type: DataTypes.TINYINT(1),
             allowNull: false,
+        },
+        event_claim_id: {
+            type: DataTypes.STRING(255),
+            allowNull: true,
         },
         updated_at: {
             type: DataTypes.DATE,

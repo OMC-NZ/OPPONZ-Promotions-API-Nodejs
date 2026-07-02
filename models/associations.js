@@ -317,6 +317,17 @@ const configureAssociations = (models) => {
         as: "claim",
     });
 
+    Event_Claims.hasMany(Deliver_Addresses, {
+        foreignKey: "event_claim_id",
+        sourceKey: "id",
+        as: "deliverAddresses",
+    });
+    Deliver_Addresses.belongsTo(Event_Claims, {
+        foreignKey: "event_claim_id",
+        targetKey: "id",
+        as: "eventClaim",
+    });
+
     Claims.hasMany(Deliveries, {
         foreignKey: "claim_id",
         sourceKey: "id",

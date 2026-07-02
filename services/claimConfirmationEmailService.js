@@ -124,12 +124,13 @@ const buildClaimConfirmationEmailHtml = ({
                 </tr>
               </table>
 
+              <div style="height:18px;line-height:18px;">&nbsp;</div>
               <h2 style="margin:0 0 18px 0;font-size:24px;line-height:1.3;font-weight:700;color:#000000;">Track your claim</h2>
               <p style="margin:0 0 22px 0;">You can use your claim reference to track the progress of your claim at <a href="${config.email.trackingUrl}" style="color:#0057B8;text-decoration:none;">oppopromotions.co.nz</a>. Simply enter the claim reference in the tracking field provided on the website.</p>
               <p style="margin:0 0 34px 0;">Please allow up to 20 working days for processing and delivery. We will do our best to complete this as soon as possible.</p>
               <p style="margin:0 0 34px 0;">If you have any questions, please contact us at <a href="mailto:${config.email.serviceEmail}" style="color:#0057B8;text-decoration:none;">${config.email.serviceEmail}</a>.</p>
               <p style="margin:0 0 24px 0;">Thank you for your purchase.</p>
-              <p style="margin:0;">Warm regards,<br><strong>OPPO New Zealand</strong></p>
+              <p style="margin:0;">Warm regards,<br><br><strong>OPPO New Zealand</strong></p>
             </td>
           </tr>
         </table>
@@ -155,6 +156,7 @@ const buildClaimConfirmationEmailText = ({
     `Selected gift: ${gift}`,
     `Delivery address: ${deliveryAddress}`,
     "",
+    "",
     "Track your claim",
     `You can use your claim reference to track the progress of your claim at ${config.email.trackingUrl}.`,
     "",
@@ -165,6 +167,7 @@ const buildClaimConfirmationEmailText = ({
     "Thank you for your purchase.",
     "",
     "Warm regards,",
+    "",
     "",
     "OPPO New Zealand",
 ].join("\n");
