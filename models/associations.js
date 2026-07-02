@@ -21,6 +21,7 @@ const configureAssociations = (models) => {
         Deliver_Addresses,
         Deliveries,
         Track_Trace,
+        TD_Scratch_Codes,
     } = models;
 
     Promotions.hasMany(Promotion_Gifts, {
@@ -348,6 +349,17 @@ const configureAssociations = (models) => {
         foreignKey: "address_id",
         targetKey: "id",
         as: "deliveryAddress",
+    });
+
+    Event_Claims.hasMany(TD_Scratch_Codes, {
+        foreignKey: "event_claim_id",
+        sourceKey: "id",
+        as: "tdScratchCodes",
+    });
+    TD_Scratch_Codes.belongsTo(Event_Claims, {
+        foreignKey: "event_claim_id",
+        targetKey: "id",
+        as: "eventClaim",
     });
 };
 

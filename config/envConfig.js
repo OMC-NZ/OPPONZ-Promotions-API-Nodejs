@@ -128,7 +128,7 @@ module.exports = {
         bucket: process.env.R2_BUCKET,
         accessKeyId: process.env.R2_ACCESS_KEY_ID,
         secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
-        publicBaseUrl: process.env.R2_PUBLIC_ASSETS_URL || process.env.R2_PUBLIC_BASE_URL,
+        publicBaseUrl: process.env.R2_PUBLIC_ASSETS_URL,
         uploadMaxBytes: parseInteger(process.env.R2_UPLOAD_MAX_BYTES, 5 * 1024 * 1024),
     },
     rateLimit: {

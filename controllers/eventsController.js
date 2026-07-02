@@ -2,14 +2,32 @@ const crypto = require("crypto");
 const { Op } = require("sequelize");
 const { sequelize, models } = require("../models");
 const { uploadFileToR2, validateFileForR2 } = require("../services/r2UploadService");
+const { writeLog } = require("../services/logService");
+const { queueEventConfirmationEmail } = require("../services/eventConfirmationEmailService");
 const { getNewZealandTime } = require("../utils/nzTimeZone");
 const { sendSuccess, sendError } = require("../utils/apiResponse");
 
 const EVENT_CLAIM_STATUS_PENDING = 0;
 const EVENT_CLAIM_ID_PREFIX = "OPNZEVTCLM";
 const EVENT_CLAIM_ID_RANDOM_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+const EVENT_CLAIM_FAILURE_MESSAGE = "Submission failed. Please check your details and try again.";
+const EVENT_CLAIM_SYSTEM_FAILURE_MESSAGE = "Submission failed. Please try again later.";
+const EVENT_CLAIM_LOG_COOLDOWN_MS = 60 * 1000;
+const eventClaimRollbackLogCache = new Map();
+const EXCLUDED_EVENT_EXTRA_DATA_KEYS = new Set([
+    "terms_accepted",
+    "event_id",
+    "slug",
+]);
 
 const normalizeText = (value) => String(value || "").trim();
+
+const formatFullName = (firstName, lastName) => {
+    return [firstName, lastName]
+        .map(normalizeText)
+        .filter(Boolean)
+        .join(" ");
+};
 
 const getEventClaimIdDatePart = (newZealandDateTime) => {
     return `${newZealandDateTime.slice(2, 4)}${newZealandDateTime.slice(5, 7)}${newZealandDateTime.slice(8, 10)}`;
@@ -78,9 +96,38 @@ const getKnownEventBodyKeys = () => new Set([
     "extra_data",
 ]);
 
-const logEventClaimRollback = (code, details = {}) => {
-    console.log("[event claim rollback]", {
+const shouldLogEventClaimRollback = (key) => {
+    const now = Date.now();
+    const cached = eventClaimRollbackLogCache.get(key);
+
+    if (cached && now - cached < EVENT_CLAIM_LOG_COOLDOWN_MS) {
+        return false;
+    }
+
+    eventClaimRollbackLogCache.set(key, now);
+    return true;
+};
+
+const logEventClaimRollback = (code, req, details = {}) => {
+    const slug = details.slug || req?.params?.slug;
+    const key = [
         code,
+        req?.ip || "",
+        req?.method || "",
+        req?.originalUrl || req?.url || "",
+        slug || "",
+    ].join("|");
+
+    if (!shouldLogEventClaimRollback(key)) return;
+
+    writeLog("security", {
+        requestId: req?.requestId,
+        event: "EVENT_CLAIM_ROLLBACK",
+        code,
+        ip: req?.ip,
+        method: req?.method,
+        path: req?.originalUrl || req?.url,
+        userAgent: req?.get ? req.get("user-agent") : undefined,
         ...details,
     });
 };
@@ -467,13 +514,13 @@ const submitEventClaim = async (req, res, next) => {
         });
 
         if (!event) {
-            logEventClaimRollback("EVENT_NOT_FOUND", {
+            logEventClaimRollback("EVENT_NOT_FOUND", req, {
                 slug,
             });
             await transaction.rollback();
             return sendError(req, res, {
                 statusCode: 404,
-                message: "Event could not be found.",
+                message: EVENT_CLAIM_FAILURE_MESSAGE,
                 code: "EVENT_NOT_FOUND",
                 includeRequestId: false,
                 includeCode: false,
@@ -505,7 +552,7 @@ const submitEventClaim = async (req, res, next) => {
             .filter(([, value]) => value === undefined || value === null || value === "");
 
         if (missingRequiredFields.length > 0) {
-            logEventClaimRollback("EVENT_CLAIM_REQUIRED_FIELDS_MISSING", {
+            logEventClaimRollback("EVENT_CLAIM_REQUIRED_FIELDS_MISSING", req, {
                 slug,
                 eventId: event.id,
                 missingFields: missingRequiredFields.map(([field]) => field),
@@ -513,7 +560,7 @@ const submitEventClaim = async (req, res, next) => {
             await transaction.rollback();
             return sendError(req, res, {
                 statusCode: 400,
-                message: "Submission failed. Please check your details and submit again.",
+                message: EVENT_CLAIM_FAILURE_MESSAGE,
                 code: "EVENT_CLAIM_REQUIRED_FIELDS_MISSING",
                 includeRequestId: false,
                 includeCode: false,
@@ -529,7 +576,7 @@ const submitEventClaim = async (req, res, next) => {
             });
 
             if (!verification.verified) {
-                logEventClaimRollback("EVENT_CLAIM_DEVICE_NOT_ELIGIBLE", {
+                logEventClaimRollback("EVENT_CLAIM_DEVICE_NOT_ELIGIBLE", req, {
                     slug,
                     eventId: event.id,
                     hasDevice: Boolean(verification.device),
@@ -537,7 +584,7 @@ const submitEventClaim = async (req, res, next) => {
                 await transaction.rollback();
                 return sendError(req, res, {
                     statusCode: 400,
-                    message: "Submission failed. Please check your details and submit again.",
+                    message: EVENT_CLAIM_FAILURE_MESSAGE,
                     code: "EVENT_CLAIM_DEVICE_NOT_ELIGIBLE",
                     includeRequestId: false,
                     includeCode: false,
@@ -576,7 +623,7 @@ const submitEventClaim = async (req, res, next) => {
             )) === "");
 
         if (requiredCustomFields.length > 0) {
-            logEventClaimRollback("EVENT_CLAIM_CUSTOM_FIELDS_MISSING", {
+            logEventClaimRollback("EVENT_CLAIM_CUSTOM_FIELDS_MISSING", req, {
                 slug,
                 eventId: event.id,
                 missingFields: requiredCustomFields.map((field) => field.field_key),
@@ -584,7 +631,7 @@ const submitEventClaim = async (req, res, next) => {
             await transaction.rollback();
             return sendError(req, res, {
                 statusCode: 400,
-                message: "Submission failed. Please check your details and submit again.",
+                message: EVENT_CLAIM_FAILURE_MESSAGE,
                 code: "EVENT_CLAIM_CUSTOM_FIELDS_MISSING",
                 includeRequestId: false,
                 includeCode: false,
@@ -606,7 +653,7 @@ const submitEventClaim = async (req, res, next) => {
             .filter((file) => !allowedFileFieldNames.has(file.fieldname));
 
         if (unknownFiles.length > 0) {
-            logEventClaimRollback("EVENT_CLAIM_UNKNOWN_UPLOAD_FIELD", {
+            logEventClaimRollback("EVENT_CLAIM_UNKNOWN_UPLOAD_FIELD", req, {
                 slug,
                 eventId: event.id,
                 receivedFields: unknownFiles.map((file) => file.fieldname),
@@ -615,7 +662,7 @@ const submitEventClaim = async (req, res, next) => {
             await transaction.rollback();
             return sendError(req, res, {
                 statusCode: 400,
-                message: "Submission failed. Please check your files and submit again.",
+                message: EVENT_CLAIM_FAILURE_MESSAGE,
                 code: "EVENT_CLAIM_UNKNOWN_UPLOAD_FIELD",
                 includeRequestId: false,
                 includeCode: false,
@@ -627,7 +674,7 @@ const submitEventClaim = async (req, res, next) => {
             const uploadFiles = getFilesForUploadKey(files, upload.upload_key);
 
             if (uploadFiles.length === 0) {
-                logEventClaimRollback("EVENT_CLAIM_UPLOAD_REQUIRED", {
+                logEventClaimRollback("EVENT_CLAIM_UPLOAD_REQUIRED", req, {
                     slug,
                     eventId: event.id,
                     missingUploadKey: upload.upload_key,
@@ -636,7 +683,7 @@ const submitEventClaim = async (req, res, next) => {
                 await transaction.rollback();
                 return sendError(req, res, {
                     statusCode: 400,
-                    message: "Submission failed. Please check your files and submit again.",
+                    message: EVENT_CLAIM_FAILURE_MESSAGE,
                     code: "EVENT_CLAIM_UPLOAD_REQUIRED",
                     includeRequestId: false,
                     includeCode: false,
@@ -648,7 +695,7 @@ const submitEventClaim = async (req, res, next) => {
         try {
             files.forEach(validateFileForR2);
         } catch (error) {
-            logEventClaimRollback("EVENT_CLAIM_FILE_VALIDATION_ERROR", {
+            logEventClaimRollback("EVENT_CLAIM_FILE_VALIDATION_ERROR", req, {
                 slug,
                 eventId: event.id,
                 message: error.message,
@@ -656,7 +703,7 @@ const submitEventClaim = async (req, res, next) => {
             await transaction.rollback();
             return sendError(req, res, {
                 statusCode: error.statusCode || 400,
-                message: "Submission failed. Please check your files and submit again.",
+                message: EVENT_CLAIM_FAILURE_MESSAGE,
                 code: "EVENT_CLAIM_FILE_VALIDATION_ERROR",
                 includeRequestId: false,
                 includeCode: false,
@@ -668,7 +715,7 @@ const submitEventClaim = async (req, res, next) => {
 
         for (const upload of uploadDefinitions) {
             const uploadFiles = getFilesForUploadKey(files, upload.upload_key);
-            const uploadedFiles = [];
+            const uploadedFileNames = [];
 
             for (const file of uploadFiles) {
                 const uploadedFile = await uploadFileToR2({
@@ -677,17 +724,12 @@ const submitEventClaim = async (req, res, next) => {
                     slug: event.slug_url,
                 });
 
-                uploadedFiles.push({
-                    key: uploadedFile.key,
-                    url: uploadedFile.url,
-                    file_name: uploadedFile.file_name,
-                    original_name: uploadedFile.original_name,
-                    content_type: uploadedFile.content_type,
-                    size: uploadedFile.size,
-                });
+                uploadedFileNames.push(uploadedFile.file_name);
             }
 
-            uploadedFilesByKey[upload.upload_key] = uploadedFiles;
+            if (uploadedFileNames.length > 0) {
+                uploadedFilesByKey[upload.upload_key] = uploadedFileNames;
+            }
         }
 
         const knownBodyKeys = getKnownEventBodyKeys();
@@ -698,15 +740,24 @@ const submitEventClaim = async (req, res, next) => {
         customFields.forEach((field) => {
             const fieldValue = getEventFieldValue(req.body, submittedExtraData, field.field_key);
 
-            if (fieldValue !== undefined) {
+            if (fieldValue !== undefined && !EXCLUDED_EVENT_EXTRA_DATA_KEYS.has(field.field_key)) {
                 customData[field.field_key] = fieldValue;
             }
         });
 
         Object.entries(req.body).forEach(([key, value]) => {
-            if (key !== "extra_data" && !knownBodyKeys.has(key) && customData[key] === undefined) {
+            if (
+                key !== "extra_data" &&
+                !knownBodyKeys.has(key) &&
+                !EXCLUDED_EVENT_EXTRA_DATA_KEYS.has(key) &&
+                customData[key] === undefined
+            ) {
                 customData[key] = value;
             }
+        });
+
+        EXCLUDED_EVENT_EXTRA_DATA_KEYS.forEach((key) => {
+            delete customData[key];
         });
 
         const customer = await Customers.create({
@@ -717,40 +768,42 @@ const submitEventClaim = async (req, res, next) => {
             updated_at: currentTime,
         }, { transaction });
         const eventClaimId = await generateUniqueEventClaimId(Event_Claims, currentTime, transaction);
+        const eventClaimImei = Number(event.requires_imei) === 1 || Number(event.requires_channel) === 1
+            ? imei
+            : null;
+        const extraData = {
+            fields: customData,
+        };
+
+        if (Object.keys(uploadedFilesByKey).length > 0) {
+            extraData.uploads = uploadedFilesByKey;
+        }
 
         await Event_Claims.create({
             id: eventClaimId,
             event_id: event.id,
-            imei,
+            imei: eventClaimImei,
             customer_id: customer.id,
             status: EVENT_CLAIM_STATUS_PENDING,
-            extra_data: JSON.stringify({
-                fields: customData,
-                delivery: Number(event.requires_delivery) === 1
-                    ? {
-                        street,
-                        suburb,
-                        city,
-                        postcode,
-                        instructions: instructions || null,
-                    }
-                    : null,
-                uploads: uploadedFilesByKey,
-            }),
+            extra_data: JSON.stringify(extraData),
             updated_at: currentTime,
         }, { transaction });
 
         await transaction.commit();
+        queueEventConfirmationEmail({
+            slugUrl: event.slug_url,
+            recipientEmail: email,
+            fullName: formatFullName(firstName, lastName),
+            eventClaimId,
+        });
 
         return sendSuccess(req, res, {
             statusCode: 201,
             includeRequestId: false,
-            data: {
-                event_claim_id: eventClaimId,
-            },
+            message: "Submission received.",
         });
     } catch (error) {
-        logEventClaimRollback("EVENT_CLAIM_SUBMIT_ERROR", {
+        logEventClaimRollback("EVENT_CLAIM_SUBMIT_ERROR", req, {
             slug: req.params.slug,
             message: error.message,
             name: error.name,
@@ -758,7 +811,7 @@ const submitEventClaim = async (req, res, next) => {
         });
         await transaction.rollback();
         error.status = 500;
-        error.publicMessage = "Failed to submit event claim.";
+        error.publicMessage = EVENT_CLAIM_SYSTEM_FAILURE_MESSAGE;
         error.includeRequestId = false;
         error.includeCode = false;
         error.includeDebug = false;

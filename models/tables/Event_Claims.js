@@ -13,7 +13,7 @@ module.exports = (sequelize) => {
         },
         imei: {
             type: DataTypes.STRING(15),
-            allowNull: false,
+            allowNull: true,
         },
         customer_id: {
             type: DataTypes.INTEGER(11),
