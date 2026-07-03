@@ -163,14 +163,14 @@ const submitClaim = async (req, res, next) => {
     const transaction = await sequelize.transaction();
 
     try {
-        const promotionId = req.body.promotion_id ?? req.body.promotionId;
-        const purchaseDateInput = req.body.purchase_date ?? req.body.purchaseDate;
-        const receiptUrl = req.body.receipt_url ?? req.body.receiptUrl;
-        const screenshotUrl = req.body.screenshot_url ?? req.body.screenshotUrl;
-        const receiptFile = getUploadedFile(req, ["receipt", "receipt_url", "receiptUrl"]);
-        const screenshotFile = getUploadedFile(req, ["screenshot", "screenshot_url", "screenshotUrl"]);
-        const firstName = req.body.first_name ?? req.body.firstName;
-        const lastName = req.body.last_name ?? req.body.lastName;
+        const promotionId = req.body.promotion_id;
+        const purchaseDateInput = req.body.purchase_date;
+        const receiptUrl = req.body.receipt_url;
+        const screenshotUrl = req.body.screenshot_url;
+        const receiptFile = getUploadedFile(req, "receipt");
+        const screenshotFile = getUploadedFile(req, "screenshot");
+        const firstName = req.body.first_name;
+        const lastName = req.body.last_name;
         const {
             imei,
             email,
@@ -179,10 +179,9 @@ const submitClaim = async (req, res, next) => {
             suburb,
             postcode,
             instructions,
-            alias,
         } = req.body;
-        const selectedGiftAlias = req.body.gift_alias || req.body.giftAlias || alias;
-        const city = normalizeText(req.body.city || req.body.CityTown);
+        const selectedGiftAlias = req.body.gift_alias;
+        const city = normalizeText(req.body.city);
         const now = getNewZealandTime();
         const purchaseDate = toNewZealandDateTime(purchaseDateInput);
         const missingFields = [

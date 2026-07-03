@@ -10,9 +10,13 @@ const {
     email,
     imei,
     maoriEnglishName,
+    oneOf,
     optional,
+    postcode,
     required,
     stringLength,
+    street,
+    titleCaseText,
 } = require("../utils/validators");
 const { publicReadRateLimiter, writeRateLimiter } = require("../config/securityConfig");
 
@@ -37,28 +41,6 @@ const parseEventClaimFiles = (req, res, next) => {
     });
 };
 
-const logEventFormRequest = (req, res, next) => {
-    const headerToken = String(req.get("x-recaptcha-token") || "").trim();
-    const queryToken = String(req.query.recaptcha_token || req.query.recaptchaToken || req.query.token || "").trim();
-
-    console.log("[event form request]", {
-        method: req.method,
-        path: req.originalUrl,
-        slug: req.params.slug,
-        query: req.query,
-        recaptcha: {
-            disabled: !require("../config/securityFeatureConfig").isRecaptchaEnabled(),
-            expectedAction: "event_form",
-            hasHeaderToken: Boolean(headerToken),
-            headerTokenLength: headerToken.length,
-            hasQueryToken: Boolean(queryToken),
-            queryTokenLength: queryToken.length,
-        },
-    });
-
-    return next();
-};
-
 router.route("/current")
     .get(
         publicReadRateLimiter,
@@ -74,9 +56,9 @@ router.route("/verify-imei-channel")
             body: {
                 imei: [required(), imei()],
                 slug_url: [required(), stringLength({ max: 255 })],
+                recaptcha_token: [optional()],
+                recaptcha_action: [optional(), oneOf(["event_imei_channel_verify"])],
             },
-        }, {
-            allowUnknown: true,
         }),
         requireRecaptcha({ action: "event_imei_channel_verify" }),
         verifyImeiChannel
@@ -94,20 +76,19 @@ router.route("/:slug/claims")
             body: {
                 imei: [optional(), imei()],
                 first_name: [optional(), maoriEnglishName(), stringLength({ max: 45 })],
-                firstName: [optional(), maoriEnglishName(), stringLength({ max: 45 })],
                 last_name: [optional(), maoriEnglishName(), stringLength({ max: 45 })],
-                lastName: [optional(), maoriEnglishName(), stringLength({ max: 45 })],
                 email: [optional(), email(), stringLength({ max: 100 })],
                 contact: [optional(), stringLength({ max: 45 })],
+                street: [optional(), street(), stringLength({ max: 255 })],
+                suburb: [optional(), titleCaseText(), stringLength({ max: 255 })],
+                city: [optional(), titleCaseText(), stringLength({ max: 255 })],
+                postcode: [optional(), postcode()],
+                instructions: [optional(), stringLength({ max: 255 })],
+                extra_data: [optional(), stringLength({ max: 10000 })],
                 recaptcha_token: [optional()],
-                recaptchaToken: [optional()],
-                token: [optional()],
-                recaptcha_action: [optional()],
-                recaptchaAction: [optional()],
-                action: [optional()],
+                recaptcha_action: [optional(), oneOf(["event_claim_submit"])],
             },
         }, {
-            allowUnknown: true,
             message: "Submission failed. Please check your details and submit again.",
             code: "EVENT_CLAIM_VALIDATION_ERROR",
             includeRequestId: false,
@@ -122,7 +103,6 @@ router.route("/:slug/claims")
 router.route("/:slug/form")
     .get(
         publicReadRateLimiter,
-        logEventFormRequest,
         requireRecaptcha({ action: "event_form" }),
         getEventForm
     )

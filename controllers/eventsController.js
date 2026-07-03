@@ -57,14 +57,7 @@ const generateUniqueEventClaimId = async (Event_Claims, newZealandDateTime, tran
 };
 
 const getEventFileFieldNames = (uploadKey) => {
-    const key = normalizeText(uploadKey);
-
-    return [
-        key,
-        `${key}[]`,
-        `uploads[${key}]`,
-        `uploads.${key}`,
-    ];
+    return [normalizeText(uploadKey)];
 };
 
 const getFilesForUploadKey = (files, uploadKey) => {
@@ -72,29 +65,6 @@ const getFilesForUploadKey = (files, uploadKey) => {
 
     return files.filter((file) => acceptedNames.has(file.fieldname));
 };
-
-const getKnownEventBodyKeys = () => new Set([
-    "imei",
-    "first_name",
-    "firstName",
-    "last_name",
-    "lastName",
-    "email",
-    "contact",
-    "street",
-    "suburb",
-    "city",
-    "CityTown",
-    "postcode",
-    "instructions",
-    "recaptcha_token",
-    "recaptchaToken",
-    "token",
-    "recaptcha_action",
-    "recaptchaAction",
-    "action",
-    "extra_data",
-]);
 
 const shouldLogEventClaimRollback = (key) => {
     const now = Date.now();
@@ -476,9 +446,9 @@ const submitEventClaim = async (req, res, next) => {
     try {
         const currentTime = getNewZealandTime();
         const slug = normalizeText(req.params.slug);
-        const firstName = req.body.first_name ?? req.body.firstName;
-        const lastName = req.body.last_name ?? req.body.lastName;
-        const city = normalizeText(req.body.city || req.body.CityTown);
+        const firstName = req.body.first_name;
+        const lastName = req.body.last_name;
+        const city = normalizeText(req.body.city);
         const imei = normalizeText(req.body.imei);
         const files = Array.isArray(req.files) ? req.files : [];
         const {
@@ -732,7 +702,6 @@ const submitEventClaim = async (req, res, next) => {
             }
         }
 
-        const knownBodyKeys = getKnownEventBodyKeys();
         const customData = {
             ...submittedExtraData,
         };
@@ -742,17 +711,6 @@ const submitEventClaim = async (req, res, next) => {
 
             if (fieldValue !== undefined && !EXCLUDED_EVENT_EXTRA_DATA_KEYS.has(field.field_key)) {
                 customData[field.field_key] = fieldValue;
-            }
-        });
-
-        Object.entries(req.body).forEach(([key, value]) => {
-            if (
-                key !== "extra_data" &&
-                !knownBodyKeys.has(key) &&
-                !EXCLUDED_EVENT_EXTRA_DATA_KEYS.has(key) &&
-                customData[key] === undefined
-            ) {
-                customData[key] = value;
             }
         });
 

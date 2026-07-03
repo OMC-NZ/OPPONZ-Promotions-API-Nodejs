@@ -20,6 +20,8 @@ if (config.environment === "development" && fs.existsSync(localDiagnosticsRoutes
     router.use("/api/local-tests", recaptchaRateLimiter, require(localDiagnosticsRoutesPath));
 }
 
+router.use(defaultRateLimiter);
+
 // Promotions endpoints:
 // GET  /api/promotions/current
 //   reCAPTCHA: x-recaptcha-token header, action=promotions_current
@@ -38,6 +40,8 @@ router.use("/api/events", eventsRoutes);
 
 // Claim endpoints:
 // POST /api/claims
+// POST /api/claims/status
+//   reCAPTCHA: body recaptcha_token, body recaptcha_action=track_claim_search
 router.use("/api/claims", claimsRoutes);
 
 // NZ Post endpoints:
@@ -46,7 +50,5 @@ router.use("/api/claims", claimsRoutes);
 // GET /api/nzpost/address/autocomplete?dpid=1104285
 //   reCAPTCHA: x-recaptcha-token header, action=address_autocomplete
 router.use("/api/nzpost", recaptchaRateLimiter, nzPostRoutes);
-
-router.use(defaultRateLimiter);
 
 module.exports = router;

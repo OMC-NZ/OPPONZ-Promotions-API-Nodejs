@@ -56,6 +56,33 @@ const checkProductionSecurityConfig = () => {
     });
   }
 
+  if (String(process.env.RECAPTCHA_DISABLED || "").trim() === "1") {
+    required.push({
+      key: "RECAPTCHA_DISABLED",
+      message: "set RECAPTCHA_DISABLED=0 in production.",
+    });
+  }
+
+  if (isBlank(config.recaptcha.secretKey)) {
+    required.push({
+      key: "RECAPTCHA_SECRET_KEY_V3",
+      message: "set the production reCAPTCHA v3 secret key.",
+    });
+  }
+
+  if (
+    isBlank(config.r2.endpoint) ||
+    isBlank(config.r2.bucket) ||
+    isBlank(config.r2.accessKeyId) ||
+    isBlank(config.r2.secretAccessKey) ||
+    isBlank(config.r2.publicBaseUrl)
+  ) {
+    required.push({
+      key: "R2_ENDPOINT/R2_BUCKET/R2_ACCESS_KEY_ID/R2_SECRET_ACCESS_KEY/R2_PUBLIC_ASSETS_URL",
+      message: "configure R2 API upload credentials and public assets URL in production.",
+    });
+  }
+
   if (config.app.corsOrigins.length === 0) {
     warnings.push({
       key: "CORS_ORIGINS",
@@ -67,6 +94,13 @@ const checkProductionSecurityConfig = () => {
     warnings.push({
       key: "CORS_ORIGINS",
       message: "remove localhost origins from production CORS_ORIGINS.",
+    });
+  }
+
+  if (config.app.corsOrigins.some((origin) => /:\/\/api\./i.test(origin))) {
+    warnings.push({
+      key: "CORS_ORIGINS",
+      message: "CORS_ORIGINS usually needs the frontend website origin, not the API origin.",
     });
   }
 
@@ -101,13 +135,6 @@ const checkProductionSecurityConfig = () => {
     warnings.push({
       key: "EMAIL_HOST/EMAIL_USER/EMAIL_PASS",
       message: "production error alert emails need SMTP settings.",
-    });
-  }
-
-  if (isBlank(config.recaptcha.secretKey)) {
-    warnings.push({
-      key: "RECAPTCHA_SECRET_KEY_V3",
-      message: "forms using reCAPTCHA will fail until this is configured.",
     });
   }
 

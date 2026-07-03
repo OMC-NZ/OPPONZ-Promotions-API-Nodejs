@@ -29,10 +29,12 @@ const fileUrlKeys = new Set([
 ]);
 
 const addressKeys = new Set([
+    "q",
     "street",
     "address",
     "deliver_address",
     "delivery_address",
+    "fulladdress",
 ]);
 
 const normalizeKey = (key) => String(key || "").replace(/[^a-zA-Z0-9_-]/g, "").toLowerCase();

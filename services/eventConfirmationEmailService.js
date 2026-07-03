@@ -50,8 +50,6 @@ const replaceTemplateVariables = (value, variables) => {
         [
             `{{${key}}}`,
             `{{ ${key} }}`,
-            `[${key}]`,
-            `{${key}}`,
         ].forEach((placeholder) => {
             output = output.replace(new RegExp(escapeRegExp(placeholder), "g"), safeReplacement);
         });
@@ -83,8 +81,6 @@ const templateUsesVariable = (value, variableNames) => {
         return variableNames.some((key) => [
             `{{${key}}}`,
             `{{ ${key} }}`,
-            `[${key}]`,
-            `{${key}}`,
         ].some((placeholder) => value.includes(placeholder)));
     }
 
@@ -194,7 +190,6 @@ const buildEventEmailVariables = async ({
 }) => {
     const variables = {
         full_name: fullName,
-        fullName,
     };
     const tdScratchCodeKeys = [
         "td_scratch_codes.td_code",

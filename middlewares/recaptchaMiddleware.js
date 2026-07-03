@@ -6,8 +6,6 @@ const { sendError } = require("../utils/apiResponse");
 const getTokenFromRequest = (req) => {
     return String(
         req.body?.recaptcha_token ||
-        req.body?.recaptchaToken ||
-        req.body?.token ||
         req.get("x-recaptcha-token") ||
         ""
     ).trim();
@@ -19,16 +17,13 @@ const requireRecaptcha = (options = {}) => {
             req.recaptcha = {
                 verified: true,
                 bypassed: true,
-                expectedAction: options.action || req.body?.recaptcha_action || req.body?.recaptchaAction || req.body?.action,
+                expectedAction: options.action || req.body?.recaptcha_action,
             };
             return next();
         }
 
         const token = getTokenFromRequest(req);
-        const expectedAction = options.action ||
-            req.body?.recaptcha_action ||
-            req.body?.recaptchaAction ||
-            req.body?.action;
+        const expectedAction = options.action || req.body?.recaptcha_action;
 
         try {
             const verification = await verifyRecaptchaToken({
