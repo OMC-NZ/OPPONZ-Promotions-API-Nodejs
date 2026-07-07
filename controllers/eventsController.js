@@ -1,7 +1,7 @@
 const crypto = require("crypto");
 const { Op } = require("sequelize");
 const { sequelize, models } = require("../models");
-const { uploadFileToR2, validateFileForR2 } = require("../services/r2UploadService");
+const { uploadClaimFile, validateClaimFile } = require("../services/claimFileUploadService");
 const { writeLog } = require("../services/logService");
 const { queueEventConfirmationEmail } = require("../services/eventConfirmationEmailService");
 const { getNewZealandTime } = require("../utils/nzTimeZone");
@@ -663,7 +663,7 @@ const submitEventClaim = async (req, res, next) => {
         }
 
         try {
-            files.forEach(validateFileForR2);
+            files.forEach(validateClaimFile);
         } catch (error) {
             logEventClaimRollback("EVENT_CLAIM_FILE_VALIDATION_ERROR", req, {
                 slug,
@@ -688,7 +688,7 @@ const submitEventClaim = async (req, res, next) => {
             const uploadedFileNames = [];
 
             for (const file of uploadFiles) {
-                const uploadedFile = await uploadFileToR2({
+                const uploadedFile = await uploadClaimFile({
                     file,
                     claimType: "events",
                     slug: event.slug_url,

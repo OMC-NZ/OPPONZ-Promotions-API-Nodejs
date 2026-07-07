@@ -131,6 +131,15 @@ module.exports = {
         publicBaseUrl: process.env.R2_PUBLIC_ASSETS_URL,
         uploadMaxBytes: parseInteger(process.env.R2_UPLOAD_MAX_BYTES, 5 * 1024 * 1024),
     },
+    oneDrive: {
+        clientId: process.env.ONEDRIVE_CLIENT_ID,
+        clientSecret: process.env.ONEDRIVE_CLIENT_SECRET,
+        refreshToken: process.env.ONEDRIVE_REFRESH_TOKEN,
+        redirectUri: process.env.ONEDRIVE_REDIRECT_URI || "https://oppopromotions.co.nz/",
+        tokenUrl: process.env.ONEDRIVE_TOKEN_URL || "https://login.microsoftonline.com/organizations/oauth2/v2.0/token",
+        uploadRoot: process.env.ONEDRIVE_UPLOAD_ROOT || "",
+        tokenRefreshBufferSeconds: parseInteger(process.env.ONEDRIVE_TOKEN_REFRESH_BUFFER_SECONDS, 60),
+    },
     rateLimit: {
         windowMs: parseInteger(process.env.RATE_LIMIT_WINDOW_MS, 15 * 60 * 1000),
         max: parseInteger(process.env.RATE_LIMIT_MAX, 200),

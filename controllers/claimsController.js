@@ -5,7 +5,7 @@ const {
     queueClaimConfirmationEmail,
 } = require("../services/claimConfirmationEmailService");
 const { checkPromotionEligibility } = require("../services/promotionEligibilityService");
-const { uploadFileToR2, validateFileForR2 } = require("../services/r2UploadService");
+const { uploadClaimFile, validateClaimFile } = require("../services/claimFileUploadService");
 const { getNewZealandTime, toNewZealandDateTime } = require("../utils/nzTimeZone");
 const { sendSuccess, sendError } = require("../utils/apiResponse");
 
@@ -228,8 +228,8 @@ const submitClaim = async (req, res, next) => {
         }
 
         try {
-            if (receiptFile) validateFileForR2(receiptFile);
-            if (screenshotFile) validateFileForR2(screenshotFile);
+            if (receiptFile) validateClaimFile(receiptFile);
+            if (screenshotFile) validateClaimFile(screenshotFile);
         } catch (error) {
             await transaction.rollback();
             return sendError(req, res, {
@@ -272,7 +272,7 @@ const submitClaim = async (req, res, next) => {
         const { device, gift, promotion } = eligibility;
 
         if (receiptFile) {
-            const receiptUpload = await uploadFileToR2({
+            const receiptUpload = await uploadClaimFile({
                 file: receiptFile,
                 claimType: "promotions",
                 slug: promotion.slug_url,
@@ -281,7 +281,7 @@ const submitClaim = async (req, res, next) => {
         }
 
         if (screenshotFile) {
-            const screenshotUpload = await uploadFileToR2({
+            const screenshotUpload = await uploadClaimFile({
                 file: screenshotFile,
                 claimType: "promotions",
                 slug: promotion.slug_url,
