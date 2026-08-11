@@ -266,6 +266,20 @@ const submitClaim = async (req, res, next) => {
                 includeRequestId: false,
                 includeCode: false,
                 includeDebug: false,
+                debug: {
+                    reason: eligibility.reason,
+                    promotion_id: promotionId,
+                    gift_alias: selectedGiftAlias,
+                    hasPromotion: Boolean(eligibility.promotion),
+                    hasDevice: Boolean(eligibility.device),
+                    hasGift: Boolean(eligibility.gift),
+                    deviceModel: eligibility.device?.model,
+                    deviceChannelCode: eligibility.device?.channel_code,
+                    deviceRedemptionStatus: eligibility.device?.redemption_status,
+                    eligiblePromotionIds: eligibility.eligiblePromotionIds,
+                    purchaseDate: eligibility.purchaseDate,
+                    requestTime: eligibility.requestTime,
+                },
             });
         }
 

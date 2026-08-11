@@ -102,12 +102,6 @@ const validateRequest = (schema = {}, options = {}) => {
         });
 
         if (errors.length > 0) {
-            console.warn("[validation failed]", {
-                path: req.originalUrl || req.url,
-                method: req.method,
-                errors: redactSensitiveData(errors),
-            });
-
             return sendError(req, res, {
                 statusCode: 400,
                 message: options.message || "Bad Request",

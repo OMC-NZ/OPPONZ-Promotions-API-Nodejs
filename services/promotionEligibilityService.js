@@ -97,7 +97,11 @@ const checkPromotionEligibility = async ({
     if (!promotion || !device || !gift) {
         return {
             eligible: false,
-            reason: "NO_ELIGIBLE_PROMOTION_FOUND",
+            reason: !promotion
+                ? "PROMOTION_NOT_FOUND"
+                : !device
+                    ? "DEVICE_NOT_FOUND"
+                    : "GIFT_NOT_FOUND",
             promotion,
             device,
             gift,
@@ -107,7 +111,7 @@ const checkPromotionEligibility = async ({
     if (Number(device.redemption_status) !== DEVICE_REDEMPTION_STATUS_AVAILABLE) {
         return {
             eligible: false,
-            reason: "NO_ELIGIBLE_PROMOTION_FOUND",
+            reason: "DEVICE_ALREADY_REDEEMED",
             promotion,
             device,
             gift,
@@ -127,10 +131,13 @@ const checkPromotionEligibility = async ({
     if (!promotionIsEligible) {
         return {
             eligible: false,
-            reason: "NO_ELIGIBLE_PROMOTION_FOUND",
+            reason: "PROMOTION_NOT_ELIGIBLE_FOR_DEVICE_OR_DATE",
             promotion,
             device,
             gift,
+            eligiblePromotionIds,
+            purchaseDate,
+            requestTime,
         };
     }
 
@@ -145,7 +152,7 @@ const checkPromotionEligibility = async ({
     if (!promotionGift) {
         return {
             eligible: false,
-            reason: "NO_ELIGIBLE_PROMOTION_FOUND",
+            reason: "GIFT_NOT_LINKED_TO_PROMOTION",
             promotion,
             device,
             gift,

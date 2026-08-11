@@ -1,16 +1,7 @@
 const { writeLog } = require("../services/logService");
-const { getNewZealandTime } = require("../utils/nzTimeZone");
-const { redactSensitiveData } = require("../utils/redactSensitiveData");
 
 const requestLogger = (req, res, next) => {
     const startedAt = process.hrtime.bigint();
-
-    console.log("[backend request received]", {
-        timestamp: getNewZealandTime(),
-        requestId: req.requestId,
-        method: req.method,
-        path: req.originalUrl,
-    });
 
     res.on("finish", () => {
         const durationMs = Number(process.hrtime.bigint() - startedAt) / 1_000_000;
@@ -31,19 +22,6 @@ const requestLogger = (req, res, next) => {
             userAgent: req.get("user-agent"),
             contentLength: res.get("content-length"),
         };
-
-        console.log("[backend response sent]", {
-            timestamp: getNewZealandTime(),
-            requestId: req.requestId,
-            method: req.method,
-            path: req.originalUrl,
-            statusCode: res.statusCode,
-            result: logPayload.result,
-            message: responseSummary?.message,
-            code: responseSummary?.code,
-            debug: failed ? redactSensitiveData(responseSummary?.debug) : undefined,
-            durationMs: Number(durationMs.toFixed(2)),
-        });
 
         writeLog("request", logPayload);
 
