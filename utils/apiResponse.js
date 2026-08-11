@@ -22,6 +22,14 @@ const getDefaultErrorMessage = (statusCode) => {
 
 const shouldExposeErrorMessage = (statusCode) => statusCode < 500 || !isProduction;
 
+const toHttpStatusMessage = (message) => {
+    return String(message || "Request failed.")
+        .replace(/[\r\n]+/g, " ")
+        .replace(/[^\x20-\x7E]/g, "")
+        .slice(0, 120)
+        .trim() || "Request failed.";
+};
+
 const sendSuccess = (req, res, options = {}) => {
     const statusCode = options.statusCode || 200;
     const payload = {
@@ -43,6 +51,11 @@ const sendSuccess = (req, res, options = {}) => {
     if (options.meta && options.includeMeta !== false) {
         payload.meta = options.meta;
     }
+
+    res.locals.apiResponseSummary = {
+        success: true,
+        message: options.message,
+    };
 
     return res.status(statusCode).json(payload);
 };
@@ -67,6 +80,16 @@ const sendError = (req, res, options = {}) => {
     if (!isProduction && options.debug && options.includeDebug !== false) {
         payload.debug = options.debug;
     }
+
+    res.statusMessage = toHttpStatusMessage(payload.message);
+
+    res.locals.apiResponseSummary = {
+        success: false,
+        message: payload.message,
+        code: options.code,
+        internalMessage: requestedMessage,
+        debug: options.debug,
+    };
 
     return res.status(statusCode).json(payload);
 };

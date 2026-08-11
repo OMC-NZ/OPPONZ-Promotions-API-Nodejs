@@ -1,4 +1,4 @@
-const { isRecaptchaEnabled } = require("../config/securityFeatureConfig");
+const { isRecaptchaEnabled, isStrictProductionSecurity } = require("../config/securityFeatureConfig");
 const { verifyRecaptchaToken } = require("../services/recaptchaService");
 const { logSecurityEvent } = require("../services/securityLogService");
 const { sendError } = require("../utils/apiResponse");
@@ -11,19 +11,48 @@ const getTokenFromRequest = (req) => {
     ).trim();
 };
 
+const getActionFromRequest = (req) => {
+    return String(
+        req.body?.recaptcha_action ||
+        req.query?.recaptcha_action ||
+        req.get("x-recaptcha-action") ||
+        ""
+    ).trim();
+};
+
 const requireRecaptcha = (options = {}) => {
     return async (req, res, next) => {
+        const strictProduction = isStrictProductionSecurity();
+        const configuredAction = options.action;
+        const requestAction = getActionFromRequest(req);
+
         if (!isRecaptchaEnabled()) {
             req.recaptcha = {
                 verified: true,
                 bypassed: true,
-                expectedAction: options.action || req.body?.recaptcha_action,
+                expectedAction: strictProduction ? configuredAction : undefined,
             };
             return next();
         }
 
         const token = getTokenFromRequest(req);
-        const expectedAction = options.action || req.body?.recaptcha_action;
+        const expectedAction = strictProduction ? configuredAction : undefined;
+
+        if (strictProduction && configuredAction && !requestAction) {
+            return sendError(req, res, {
+                statusCode: 400,
+                message: "reCAPTCHA action is required.",
+                code: "RECAPTCHA_ACTION_REQUIRED",
+            });
+        }
+
+        if (strictProduction && configuredAction && requestAction !== configuredAction) {
+            return sendError(req, res, {
+                statusCode: 400,
+                message: "reCAPTCHA action is invalid.",
+                code: "RECAPTCHA_ACTION_INVALID",
+            });
+        }
 
         try {
             const verification = await verifyRecaptchaToken({

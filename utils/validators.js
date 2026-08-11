@@ -1,4 +1,5 @@
 const moment = require("moment-timezone");
+const { isStrictProductionSecurity } = require("../config/securityFeatureConfig");
 
 const MAORI_LETTERS = "A-Za-z\\u0100\\u0112\\u012A\\u014C\\u016A\\u0101\\u0113\\u012B\\u014D\\u016B";
 const NAME_PATTERN = new RegExp(`^[${MAORI_LETTERS}]+(?: [${MAORI_LETTERS}]+)*$`);
@@ -213,6 +214,18 @@ const fileExtension = (
         : { valid: false, message };
 });
 
+const recaptchaAction = (allowedValues) => {
+    return isStrictProductionSecurity()
+        ? [required(), oneOf(allowedValues)]
+        : [optional()];
+};
+
+const recaptchaToken = () => {
+    return isStrictProductionSecurity()
+        ? [required()]
+        : [optional()];
+};
+
 module.exports = {
     required,
     optional,
@@ -229,6 +242,8 @@ module.exports = {
     date,
     url,
     fileExtension,
+    recaptchaAction,
+    recaptchaToken,
     titleCaseWords,
     titleCaseStreet,
 };

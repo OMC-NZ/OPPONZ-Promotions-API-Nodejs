@@ -5,7 +5,24 @@ const baseEnvPath = path.resolve(__dirname, "../.env");
 dotenv.config({ path: baseEnvPath });
 
 const runtimeEnvironment = process.env.NODE_ENV || "development";
-const environmentEnvPath = path.resolve(__dirname, `../.env.${runtimeEnvironment}`);
+const getEnvironmentEnvFileName = () => {
+    const requestedEnvFile = process.env.ENV_FILE;
+
+    if (!requestedEnvFile) {
+        return `.env.${runtimeEnvironment}`;
+    }
+
+    const envFileName = path.basename(requestedEnvFile);
+
+    if (envFileName !== requestedEnvFile || !envFileName.startsWith(".env.")) {
+        throw new Error("ENV_FILE must be a local .env.* file name.");
+    }
+
+    return envFileName;
+};
+
+const environmentEnvFileName = getEnvironmentEnvFileName();
+const environmentEnvPath = path.resolve(__dirname, `../${environmentEnvFileName}`);
 dotenv.config({
     path: environmentEnvPath,
     override: true,
@@ -51,8 +68,10 @@ module.exports = {
     envFiles: {
         base: baseEnvPath,
         environment: environmentEnvPath,
+        environmentFileName: environmentEnvFileName,
     },
     app: {
+        localProductionTest: parseBoolean(process.env.LOCAL_PRODUCTION_TEST),
         port: parseInteger(process.env.PORT || process.env.APP_PORT, undefined),
         apiVersion: process.env.API_VERSION,
         corsOrigins: parseList(process.env.CORS_ORIGINS),

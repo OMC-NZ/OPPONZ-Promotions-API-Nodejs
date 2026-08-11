@@ -28,10 +28,15 @@ const checkProductionSecurityConfig = () => {
     return;
   }
 
-  if (!config.app.enforceHttps) {
+  if (!config.app.enforceHttps && !config.app.localProductionTest) {
     required.push({
       key: "ENFORCE_HTTPS",
       message: "set ENFORCE_HTTPS=true in production.",
+    });
+  } else if (!config.app.enforceHttps && config.app.localProductionTest) {
+    warnings.push({
+      key: "ENFORCE_HTTPS",
+      message: "HTTPS enforcement is disabled for local production-env testing.",
     });
   }
 
@@ -56,10 +61,15 @@ const checkProductionSecurityConfig = () => {
     });
   }
 
-  if (String(process.env.RECAPTCHA_DISABLED || "").trim() === "1") {
+  if (String(process.env.RECAPTCHA_DISABLED || "").trim() === "1" && !config.app.localProductionTest) {
     required.push({
       key: "RECAPTCHA_DISABLED",
       message: "set RECAPTCHA_DISABLED=0 in production.",
+    });
+  } else if (String(process.env.RECAPTCHA_DISABLED || "").trim() === "1" && config.app.localProductionTest) {
+    warnings.push({
+      key: "RECAPTCHA_DISABLED",
+      message: "reCAPTCHA is disabled for local production-env testing.",
     });
   }
 

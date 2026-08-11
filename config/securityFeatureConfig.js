@@ -6,6 +6,7 @@ const isDisabled = (value, fallback = false) => {
 };
 
 const isDevelopment = config.environment === "development";
+const isStrictProduction = config.environment === "production" && !config.app.localProductionTest;
 
 const securityFeatures = {
     recaptcha: {
@@ -14,8 +15,10 @@ const securityFeatures = {
 };
 
 const isRecaptchaEnabled = () => !securityFeatures.recaptcha.disabled;
+const isStrictProductionSecurity = () => isStrictProduction;
 
 module.exports = {
     securityFeatures,
     isRecaptchaEnabled,
+    isStrictProductionSecurity,
 };

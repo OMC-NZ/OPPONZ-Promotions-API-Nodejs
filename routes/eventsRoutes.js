@@ -10,9 +10,9 @@ const {
     email,
     imei,
     maoriEnglishName,
-    oneOf,
     optional,
     postcode,
+    recaptchaAction,
     required,
     stringLength,
     street,
@@ -57,8 +57,11 @@ router.route("/verify-imei-channel")
                 imei: [required(), imei()],
                 slug_url: [required(), stringLength({ max: 255 })],
                 recaptcha_token: [optional()],
-                recaptcha_action: [optional(), oneOf(["event_imei_channel_verify"])],
+                recaptcha_action: recaptchaAction(["event_imei_channel_verify"]),
             },
+        }, {
+            message: "Please check your IMEI and try again.",
+            code: "EVENT_IMEI_VERIFICATION_VALIDATION_ERROR",
         }),
         requireRecaptcha({ action: "event_imei_channel_verify" }),
         verifyImeiChannel
@@ -86,7 +89,7 @@ router.route("/:slug/claims")
                 instructions: [optional(), stringLength({ max: 255 })],
                 extra_data: [optional(), stringLength({ max: 10000 })],
                 recaptcha_token: [optional()],
-                recaptcha_action: [optional(), oneOf(["event_claim_submit"])],
+                recaptcha_action: recaptchaAction(["event_claim_submit"]),
             },
         }, {
             message: "Submission failed. Please check your details and submit again.",

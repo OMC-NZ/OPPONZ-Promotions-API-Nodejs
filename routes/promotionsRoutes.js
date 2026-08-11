@@ -4,7 +4,7 @@ const { verifyImei } = require("../controllers/imeiController");
 const { methodNotAllowed } = require("../middlewares/routeSecurity");
 const { validateRequest } = require("../middlewares/validateRequest");
 const { requireRecaptcha } = require("../middlewares/recaptchaMiddleware");
-const { required, imei, date, oneOf } = require("../utils/validators");
+const { required, imei, date, recaptchaAction, recaptchaToken } = require("../utils/validators");
 const { publicReadRateLimiter, writeRateLimiter } = require("../config/securityConfig");
 
 const router = express.Router();
@@ -24,8 +24,8 @@ router.route("/verify-imei-purchase")
             body: {
                 imei: [required(), imei()],
                 purchase_date: [required(), date()],
-                recaptcha_token: [required()],
-                recaptcha_action: [required(), oneOf(["redeem_search"])],
+                recaptcha_token: recaptchaToken(),
+                recaptcha_action: recaptchaAction(["redeem_search"]),
             },
         }),
         requireRecaptcha({ action: "redeem_search" }),

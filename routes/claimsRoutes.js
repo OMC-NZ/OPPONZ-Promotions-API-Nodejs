@@ -17,7 +17,7 @@ const {
     stringLength,
     street,
     titleCaseText,
-    oneOf,
+    recaptchaAction,
 } = require("../utils/validators");
 const { writeRateLimiter } = require("../config/securityConfig");
 
@@ -53,7 +53,7 @@ router.route("/status")
                 claim_id: [required(), stringLength({ max: 255 })],
                 email: [required(), email(), stringLength({ max: 100 })],
                 recaptcha_token: [optional()],
-                recaptcha_action: [optional(), oneOf(["track_claim_search"])],
+                recaptcha_action: recaptchaAction(["track_claim_search"]),
             },
         }, {
             message: "Claim details could not be verified.",
@@ -89,7 +89,7 @@ router.route("/")
                 instructions: [optional(), stringLength({ max: 255 })],
                 gift_alias: [optional(), stringLength({ max: 45 })],
                 recaptcha_token: [optional()],
-                recaptcha_action: [optional(), oneOf(["claim_submit"])],
+                recaptcha_action: recaptchaAction(["claim_submit"]),
             },
         }, {
             message: "Submission failed. Please check your details and submit again.",
