@@ -73,6 +73,11 @@ const verifyRecaptchaToken = async ({ token, expectedAction }) => {
     }
 
     const result = await postSiteVerify(token);
+    console.log("[google recaptcha siteverify result]", {
+        expectedAction,
+        result,
+    });
+
     const googleSuccess = result.success === true;
     const scorePresent = typeof result.score === "number";
     const score = scorePresent ? result.score : 0;
