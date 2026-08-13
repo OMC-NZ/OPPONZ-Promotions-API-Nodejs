@@ -310,6 +310,7 @@ const submitClaim = async (req, res, next) => {
             contact,
             updated_at: now,
         }, { transaction });
+
         const claimId = await generateUniqueClaimId(Claims, now, transaction);
 
         await Claims.create({
