@@ -1,4 +1,5 @@
 const { writeLog } = require("../services/logService");
+const { getNewZealandTime } = require("../utils/nzTimeZone");
 
 const requestLogger = (req, res, next) => {
     const startedAt = process.hrtime.bigint();
@@ -22,6 +23,17 @@ const requestLogger = (req, res, next) => {
             userAgent: req.get("user-agent"),
             contentLength: res.get("content-length"),
         };
+
+        console.log("[api request]", {
+            timestamp: getNewZealandTime(),
+            requestId: logPayload.requestId,
+            method: logPayload.method,
+            path: logPayload.path,
+            statusCode: logPayload.statusCode,
+            result: logPayload.result,
+            code: logPayload.code,
+            durationMs: logPayload.durationMs,
+        });
 
         writeLog("request", logPayload);
 
