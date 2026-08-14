@@ -6,7 +6,7 @@ const {
 const { requireRecaptcha } = require("../middlewares/recaptchaMiddleware");
 const { methodNotAllowed } = require("../middlewares/routeSecurity");
 const { validateRequest } = require("../middlewares/validateRequest");
-const { required, recaptchaAction, stringLength } = require("../utils/validators");
+const { optional, required, stringLength } = require("../utils/validators");
 
 const router = express.Router();
 
@@ -15,7 +15,7 @@ router.route("/address/search")
         validateRequest({
             query: {
                 q: [required(), stringLength({ max: 255 })],
-                recaptcha_action: recaptchaAction(["address_search"]),
+                recaptcha_action: [optional()],
             },
         }, {
             message: "Please enter an address to search.",
@@ -32,7 +32,7 @@ router.route("/address/autocomplete")
         validateRequest({
             query: {
                 dpid: [required(), stringLength({ max: 50 })],
-                recaptcha_action: recaptchaAction(["address_autocomplete"]),
+                recaptcha_action: [optional()],
             },
         }, {
             message: "Please select a valid address.",
