@@ -8,6 +8,7 @@ const config = require("../config/envConfig");
 const {
     email,
     fileExtension,
+    claimReference,
     imei,
     integer,
     maoriEnglishName,
@@ -50,7 +51,7 @@ router.route("/status")
         writeRateLimiter,
         validateRequest({
             body: {
-                claim_id: [required(), stringLength({ max: 255 })],
+                claim_id: [required(), claimReference(), stringLength({ max: 255 })],
                 email: [required(), email(), stringLength({ max: 100 })],
                 recaptcha_token: [optional()],
                 recaptcha_action: recaptchaAction(["track_claim_search"]),

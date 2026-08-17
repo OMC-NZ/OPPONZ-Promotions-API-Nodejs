@@ -76,6 +76,21 @@ const postcode = (message = "Postcode must be a 4-digit string.") => createValid
         : { valid: false, message };
 });
 
+const claimReference = (
+    message = "Claim reference format is invalid."
+) => createValidator("claimReference", (value) => {
+    if (isEmptyValue(value)) return { valid: true };
+
+    const text = String(value).trim();
+    const promotionClaimPattern = /^OPNZPROCLM-\d{6}-.+/i;
+    const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    const valid = promotionClaimPattern.test(text) || uuidPattern.test(text);
+
+    return valid
+        ? { valid: true, value: text }
+        : { valid: false, message };
+});
+
 const uppercaseFirstLetter = (word) => {
     if (!word) return word;
     return `${word.charAt(0).toLocaleUpperCase("en-NZ")}${word.slice(1).toLocaleLowerCase("en-NZ")}`;
@@ -233,6 +248,7 @@ module.exports = {
     imei,
     contact,
     postcode,
+    claimReference,
     maoriEnglishName,
     street,
     titleCaseText,
