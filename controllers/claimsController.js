@@ -323,6 +323,7 @@ const submitClaim = async (req, res, next) => {
             receipt_url: storedReceiptUrl,
             screenshot_url: storedScreenshotUrl,
             email_status: EMAIL_STATUS_FAILED,
+            created_at: now,
             updated_at: now,
         }, { transaction });
 
