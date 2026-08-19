@@ -9,8 +9,6 @@ const DEFAULT_ALLOWED_FILE_EXTENSIONS = [
     ".png",
     ".gif",
     ".webp",
-    ".heic",
-    ".heif",
     ".pdf",
 ];
 

@@ -6,8 +6,6 @@ const config = require("../config/envConfig");
 const allowedMimeTypes = new Set([
     "image/jpeg",
     "image/png",
-    "image/heic",
-    "image/heif",
     "application/pdf",
 ]);
 
@@ -15,8 +13,6 @@ const allowedExtensions = new Set([
     ".jpg",
     ".jpeg",
     ".png",
-    ".heic",
-    ".heif",
     ".pdf",
 ]);
 
