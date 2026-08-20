@@ -226,7 +226,7 @@ const verifyImei = async (req, res, next) => {
         const gifts = giftIds.length === 0
             ? []
             : await Gifts.findAll({
-                attributes: ["id", "name", "alias", "color"],
+                attributes: ["id", "name", "alias", "color", "status"],
                 where: {
                     id: {
                         [Op.in]: giftIds,
@@ -276,6 +276,7 @@ const verifyImei = async (req, res, next) => {
                     name: gift.name,
                     alias: gift.alias,
                     color: gift.color,
+                    status: gift.status,
                 }));
 
             return [{

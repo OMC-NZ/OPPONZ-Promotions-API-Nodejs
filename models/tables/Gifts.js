@@ -20,6 +20,16 @@ module.exports = (sequelize) => {
             type: DataTypes.STRING(45),
             allowNull: false,
         },
+        status: {
+            type: DataTypes.TINYINT(1),
+            allowNull: false,
+            defaultValue: 0,
+            validate: {
+                isInt: true,
+                min: 0,
+                max: 9,
+            },
+        },
         updated_at: {
             type: DataTypes.DATE,
             allowNull: false,
