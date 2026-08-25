@@ -26,8 +26,8 @@ const getLogTypeConfig = (type) => {
     return logTypeDirectories[type] || logTypeDirectories.request;
 };
 
-const getLogFilePath = (type, date = new Date()) => {
-    const datePart = date.toISOString().slice(0, 10);
+const getLogFilePath = (type) => {
+    const datePart = getNewZealandTime().slice(0, 10);
     const typeConfig = getLogTypeConfig(type);
     return path.join(logDirectory, typeConfig.directory, `${typeConfig.prefix}-${datePart}.log`);
 };
@@ -37,15 +37,15 @@ const ensureLogDirectory = async (type) => {
 };
 
 const writeLog = async (type, payload) => {
+    const timestamp = getNewZealandTime();
     const entry = {
-        timestamp: getNewZealandTime(),
         type,
         ...redactSensitiveData(payload),
     };
 
     try {
         await ensureLogDirectory(type);
-        await fs.appendFile(getLogFilePath(type), `${JSON.stringify(entry)}\n`, "utf8");
+        await fs.appendFile(getLogFilePath(type), `${timestamp} ${JSON.stringify(entry)}\n`, "utf8");
     } catch (error) {
         console.error("Failed to write log file:", error.message);
     }
