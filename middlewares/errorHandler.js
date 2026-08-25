@@ -3,6 +3,7 @@ const { writeLog } = require("../services/logService");
 const { getErrorLocation } = require("../utils/errorDetails");
 const { sendError } = require("../utils/apiResponse");
 const { redactSensitiveData } = require("../utils/redactSensitiveData");
+const { getRequestLogContext } = require("../utils/requestLogContext");
 const { logRouteNotFound } = require("./routeSecurity");
 
 const notFoundHandler = (req, res) => {
@@ -18,6 +19,7 @@ const notFoundHandler = (req, res) => {
 const errorHandler = (error, req, res, next) => {
     const status = error.status || error.statusCode || 500;
     const location = getErrorLocation(error);
+    const requestLogContext = getRequestLogContext(req);
 
     console.error("Request error:", redactSensitiveData({
         requestId: req.requestId,
@@ -29,6 +31,7 @@ const errorHandler = (error, req, res, next) => {
         location,
         stack: error.stack,
         details: error.details,
+        ...requestLogContext,
     }));
 
     writeLog("error", {
@@ -41,6 +44,7 @@ const errorHandler = (error, req, res, next) => {
         location,
         stack: error.stack,
         details: error.details,
+        ...requestLogContext,
     });
 
     alertError({

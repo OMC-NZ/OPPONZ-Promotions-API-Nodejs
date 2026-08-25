@@ -1,4 +1,6 @@
 const { writeLog } = require("../services/logService");
+const { getRequestLogContext } = require("../utils/requestLogContext");
+
 const requestLogger = (req, res, next) => {
     const startedAt = process.hrtime.bigint();
 
@@ -6,6 +8,7 @@ const requestLogger = (req, res, next) => {
         const durationMs = Number(process.hrtime.bigint() - startedAt) / 1_000_000;
         const responseSummary = res.locals.apiResponseSummary;
         const failed = res.statusCode >= 400;
+        const requestLogContext = getRequestLogContext(req);
         const logPayload = {
             requestId: req.requestId,
             ip: req.ip,
@@ -20,6 +23,7 @@ const requestLogger = (req, res, next) => {
             durationMs: Number(durationMs.toFixed(2)),
             userAgent: req.get("user-agent"),
             contentLength: res.get("content-length"),
+            ...requestLogContext,
         };
 
         console.log("[api request]", {
@@ -29,6 +33,7 @@ const requestLogger = (req, res, next) => {
             statusCode: logPayload.statusCode,
             result: logPayload.result,
             code: logPayload.code,
+            identifiers: logPayload.identifiers,
             durationMs: logPayload.durationMs,
         });
 
