@@ -291,7 +291,7 @@ const submitClaim = async (req, res, next) => {
                 claimType: "promotions",
                 slug: promotion.slug_url,
             });
-            storedReceiptUrl = receiptUpload.key;
+            storedReceiptUrl = receiptUpload.relative_key;
         }
 
         if (screenshotFile) {
@@ -300,7 +300,7 @@ const submitClaim = async (req, res, next) => {
                 claimType: "promotions",
                 slug: promotion.slug_url,
             });
-            storedScreenshotUrl = screenshotUpload.key;
+            storedScreenshotUrl = screenshotUpload.relative_key;
         }
 
         const customer = await Customers.create({
