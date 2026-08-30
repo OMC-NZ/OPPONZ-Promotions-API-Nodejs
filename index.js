@@ -56,6 +56,7 @@ const startServer = async () => {
 
     server = app.listen(PORT, () => {
       console.log(`Server is running ${isDevelopment ? "Development" : "Production"} Mode on the port: ${PORT}`);
+      console.log(`Server time check: local=${new Date().toString()}`);
       console.log(`Trust proxy setting: ${JSON.stringify(config.app.trustProxy)}`);
       console.log(`Server timeouts: request=${server.requestTimeout}ms, headers=${server.headersTimeout}ms, keepAlive=${server.keepAliveTimeout}ms`);
     });

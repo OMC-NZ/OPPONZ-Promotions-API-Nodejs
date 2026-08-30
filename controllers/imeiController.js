@@ -1,5 +1,5 @@
-const { Op, fn, col } = require("sequelize");
-const { models } = require("../models");
+const { Op, fn, col, literal } = require("sequelize");
+const { sequelize, models } = require("../models");
 const { findEligiblePromotionIdsForDevice } = require("../services/promotionEligibilityService");
 const { getNewZealandTime, toNewZealandDateTime } = require("../utils/nzTimeZone");
 const { sendSuccess } = require("../utils/apiResponse");
@@ -119,6 +119,8 @@ const verifyImei = async (req, res, next) => {
         const { imei, purchase_date: purchaseDateInput } = req.body;
         const requestTime = getNewZealandTime();
         const purchaseDate = toNewZealandDateTime(purchaseDateInput);
+        const purchaseDateLiteral = sequelize.escape(purchaseDate);
+        const requestTimeLiteral = sequelize.escape(requestTime);
         const {
             Devices,
             Channels,
@@ -165,26 +167,10 @@ const verifyImei = async (req, res, next) => {
                 },
                 channel_code: device.channel_code,
                 [Op.and]: [
-                    {
-                        start_date: {
-                            [Op.lte]: purchaseDate,
-                        },
-                    },
-                    {
-                        end_date: {
-                            [Op.gte]: purchaseDate,
-                        },
-                    },
-                    {
-                        start_date: {
-                            [Op.lte]: requestTime,
-                        },
-                    },
-                    {
-                        redeem_end_date: {
-                            [Op.gte]: requestTime,
-                        },
-                    },
+                    literal(`start_date <= ${purchaseDateLiteral}`),
+                    literal(`end_date >= ${purchaseDateLiteral}`),
+                    literal(`start_date <= ${requestTimeLiteral}`),
+                    literal(`redeem_end_date >= ${requestTimeLiteral}`),
                 ],
             },
             raw: true,

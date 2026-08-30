@@ -25,17 +25,25 @@ const requestLogger = (req, res, next) => {
             contentLength: res.get("content-length"),
             ...requestLogContext,
         };
-
-        console.log("[api request]", {
+        const consolePayload = {
             requestId: logPayload.requestId,
             method: logPayload.method,
             path: logPayload.path,
             statusCode: logPayload.statusCode,
             result: logPayload.result,
             code: logPayload.code,
-            identifiers: logPayload.identifiers,
             durationMs: logPayload.durationMs,
-        });
+        };
+
+        if (logPayload.identifiers) {
+            consolePayload.identifiers = logPayload.identifiers;
+        }
+
+        if (logPayload.security) {
+            consolePayload.security = logPayload.security;
+        }
+
+        console.log("[api request]", consolePayload);
 
         writeLog("request", logPayload);
 

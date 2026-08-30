@@ -1,5 +1,5 @@
-const { Op, fn, col } = require("sequelize");
-const { models } = require("../models");
+const { Op, fn, col, literal } = require("sequelize");
+const { sequelize, models } = require("../models");
 const { getNewZealandTime } = require("../utils/nzTimeZone");
 const { sendSuccess } = require("../utils/apiResponse");
 const apiFields = require("../config/apiFields");
@@ -51,6 +51,7 @@ const groupChannelsByDate = (availabilityMap, channelMap) => {
 const getCurrentPromotions = async (req, res, next) => {
     try {
         const currentTime = getNewZealandTime();
+        const currentTimeLiteral = sequelize.escape(currentTime);
         const {
             Promotions,
             Channels,
@@ -65,12 +66,10 @@ const getCurrentPromotions = async (req, res, next) => {
                 [fn("DATE_FORMAT", col("end_date"), "%Y-%m-%d"), "end_date"],
             ],
             where: {
-                start_date: {
-                    [Op.lte]: currentTime,
-                },
-                end_date: {
-                    [Op.gte]: currentTime,
-                },
+                [Op.and]: [
+                    literal(`start_date <= ${currentTimeLiteral}`),
+                    literal(`end_date >= ${currentTimeLiteral}`),
+                ],
             },
             order: [
                 ["start_date", "DESC"],

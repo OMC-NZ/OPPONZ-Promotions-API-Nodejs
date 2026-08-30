@@ -1,5 +1,5 @@
-const { Op } = require("sequelize");
-const { models } = require("../models");
+const { Op, literal } = require("sequelize");
+const { sequelize, models } = require("../models");
 const { getNewZealandTime, toNewZealandDateTime } = require("../utils/nzTimeZone");
 
 const DEVICE_REDEMPTION_STATUS_AVAILABLE = 0;
@@ -28,6 +28,9 @@ const findEligiblePromotionIdsForDevice = async ({
 
     if (modelPromotionIds.length === 0) return [];
 
+    const purchaseDateLiteral = sequelize.escape(purchaseDate);
+    const requestTimeLiteral = sequelize.escape(requestTime);
+
     const promotionChannels = await Promotion_Channels.findAll({
         attributes: ["promotion_id", "channel_code", "start_date", "end_date", "redeem_end_date"],
         where: {
@@ -36,26 +39,10 @@ const findEligiblePromotionIdsForDevice = async ({
             },
             channel_code: device.channel_code,
             [Op.and]: [
-                {
-                    start_date: {
-                        [Op.lte]: purchaseDate,
-                    },
-                },
-                {
-                    end_date: {
-                        [Op.gte]: purchaseDate,
-                    },
-                },
-                {
-                    start_date: {
-                        [Op.lte]: requestTime,
-                    },
-                },
-                {
-                    redeem_end_date: {
-                        [Op.gte]: requestTime,
-                    },
-                },
+                literal(`start_date <= ${purchaseDateLiteral}`),
+                literal(`end_date >= ${purchaseDateLiteral}`),
+                literal(`start_date <= ${requestTimeLiteral}`),
+                literal(`redeem_end_date >= ${requestTimeLiteral}`),
             ],
         },
         transaction,

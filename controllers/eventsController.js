@@ -1,5 +1,5 @@
 const crypto = require("crypto");
-const { Op } = require("sequelize");
+const { Op, literal } = require("sequelize");
 const { sequelize, models } = require("../models");
 const { uploadClaimFile, validateClaimFile } = require("../services/claimFileUploadService");
 const { writeLog } = require("../services/logService");
@@ -124,6 +124,15 @@ const getEventFieldValue = (body, extraData, fieldKey) => {
     return extraData[fieldKey];
 };
 
+const getActiveDateRangeConditions = (dateTime) => {
+    const dateTimeLiteral = sequelize.escape(dateTime);
+
+    return [
+        literal(`start_date <= ${dateTimeLiteral}`),
+        literal(`end_date >= ${dateTimeLiteral}`),
+    ];
+};
+
 const getCurrentEvents = async (req, res, next) => {
     try {
         const currentTime = getNewZealandTime();
@@ -136,12 +145,7 @@ const getCurrentEvents = async (req, res, next) => {
                 "slug_url",
             ],
             where: {
-                start_date: {
-                    [Op.lte]: currentTime,
-                },
-                end_date: {
-                    [Op.gte]: currentTime,
-                },
+                [Op.and]: getActiveDateRangeConditions(currentTime),
             },
             order: [["id", "DESC"]],
             raw: true,
@@ -203,12 +207,7 @@ const getEventForm = async (req, res, next) => {
             ],
             where: {
                 slug_url: slug,
-                start_date: {
-                    [Op.lte]: currentTime,
-                },
-                end_date: {
-                    [Op.gte]: currentTime,
-                },
+                [Op.and]: getActiveDateRangeConditions(currentTime),
             },
             raw: true,
         });
@@ -472,12 +471,7 @@ const submitEventClaim = async (req, res, next) => {
         const event = await Events.findOne({
             where: {
                 slug_url: slug,
-                start_date: {
-                    [Op.lte]: currentTime,
-                },
-                end_date: {
-                    [Op.gte]: currentTime,
-                },
+                [Op.and]: getActiveDateRangeConditions(currentTime),
             },
             transaction,
             raw: true,
