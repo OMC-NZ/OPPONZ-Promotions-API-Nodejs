@@ -289,7 +289,7 @@ const submitClaim = async (req, res, next) => {
             const receiptUpload = await uploadClaimFile({
                 file: receiptFile,
                 claimType: "promotions",
-                slug: promotion.slug_url,
+                slug: promotion.id,
             });
             storedReceiptUrl = receiptUpload.relative_key;
         }
@@ -298,7 +298,7 @@ const submitClaim = async (req, res, next) => {
             const screenshotUpload = await uploadClaimFile({
                 file: screenshotFile,
                 claimType: "promotions",
-                slug: promotion.slug_url,
+                slug: promotion.id,
             });
             storedScreenshotUrl = screenshotUpload.relative_key;
         }
