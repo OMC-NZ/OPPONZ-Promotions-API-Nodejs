@@ -33,7 +33,7 @@ function getCorsOptions() {
             }
         },
         methods: ["GET", "POST", "OPTIONS"],
-        allowedHeaders: ["Content-Type", "Authorization", "X-API-Key", "X-Request-Id", "X-Recaptcha-Token"],
+        allowedHeaders: ["Content-Type", "Authorization", "X-API-Key", "X-Request-Id", "X-Recaptcha-Token", "X-Recaptcha-Action"],
         maxAge: 86400,
         optionsSuccessStatus: 204,
     };
