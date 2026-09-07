@@ -5,7 +5,7 @@ const { methodNotAllowed } = require("../middlewares/routeSecurity");
 const { validateRequest } = require("../middlewares/validateRequest");
 const { requireRecaptcha } = require("../middlewares/recaptchaMiddleware");
 const { required, imei, date, recaptchaAction, recaptchaToken } = require("../utils/validators");
-const { publicReadRateLimiter, writeRateLimiter } = require("../config/securityConfig");
+const { publicReadRateLimiter, imeiVerificationRateLimiter } = require("../config/securityConfig");
 
 const router = express.Router();
 
@@ -19,7 +19,7 @@ router.route("/current")
 
 router.route("/verify-imei-purchase")
     .post(
-        writeRateLimiter,
+        imeiVerificationRateLimiter,
         validateRequest({
             body: {
                 imei: [required(), imei()],

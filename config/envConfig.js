@@ -161,12 +161,14 @@ module.exports = {
     },
     rateLimit: {
         windowMs: parseInteger(process.env.RATE_LIMIT_WINDOW_MS, 15 * 60 * 1000),
-        max: parseInteger(process.env.RATE_LIMIT_MAX, 200),
+        max: parseInteger(process.env.RATE_LIMIT_MAX, 600),
         publicWindowMs: parseInteger(process.env.PUBLIC_RATE_LIMIT_WINDOW_MS, 15 * 60 * 1000),
-        publicMax: parseInteger(process.env.PUBLIC_RATE_LIMIT_MAX, 300),
+        publicMax: parseInteger(process.env.PUBLIC_RATE_LIMIT_MAX, 500),
         writeWindowMs: parseInteger(process.env.WRITE_RATE_LIMIT_WINDOW_MS, 60 * 60 * 1000),
-        writeMax: parseInteger(process.env.WRITE_RATE_LIMIT_MAX, 10),
+        writeMax: parseInteger(process.env.WRITE_RATE_LIMIT_MAX, 30),
+        imeiVerificationWindowMs: parseInteger(process.env.IMEI_VERIFICATION_RATE_LIMIT_WINDOW_MS, 60 * 60 * 1000),
+        imeiVerificationMax: parseInteger(process.env.IMEI_VERIFICATION_RATE_LIMIT_MAX, 20),
         recaptchaWindowMs: parseInteger(process.env.RECAPTCHA_RATE_LIMIT_WINDOW_MS, 15 * 60 * 1000),
-        recaptchaMax: parseInteger(process.env.RECAPTCHA_RATE_LIMIT_MAX, 20),
+        recaptchaMax: parseInteger(process.env.RECAPTCHA_RATE_LIMIT_MAX, 300),
     },
 };

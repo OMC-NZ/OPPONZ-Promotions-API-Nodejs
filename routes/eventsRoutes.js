@@ -18,7 +18,7 @@ const {
     street,
     titleCaseText,
 } = require("../utils/validators");
-const { publicReadRateLimiter, writeRateLimiter } = require("../config/securityConfig");
+const { publicReadRateLimiter, writeRateLimiter, imeiVerificationRateLimiter } = require("../config/securityConfig");
 
 const router = express.Router();
 const upload = multer({
@@ -51,7 +51,7 @@ router.route("/current")
 
 router.route("/verify-imei-channel")
     .post(
-        writeRateLimiter,
+        imeiVerificationRateLimiter,
         validateRequest({
             body: {
                 imei: [required(), imei()],

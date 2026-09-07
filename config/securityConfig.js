@@ -1,4 +1,4 @@
-const { rateLimit } = require("express-rate-limit");
+const { rateLimit, ipKeyGenerator } = require("express-rate-limit");
 const config = require("./envConfig");
 const { logSecurityEvent } = require("../services/securityLogService");
 const { sendError } = require("../utils/apiResponse");
@@ -28,6 +28,37 @@ const commonRateLimitOptions = {
     handler: jsonRateLimitHandler,
 };
 
+const getIpRateLimitKey = (req) => {
+    return ipKeyGenerator(req.ip || req.socket?.remoteAddress || "");
+};
+
+const getEndpointRateLimitKey = (req) => {
+    const endpointKey = String(req.originalUrl || req.path || "")
+        .split("?")[0]
+        .toLowerCase();
+
+    return `${getIpRateLimitKey(req)}:${endpointKey}`;
+};
+
+const getRequestIdentifierRateLimitKey = (req) => {
+    const identifiers = [
+        req.body?.imei,
+        req.body?.claim_id,
+        req.body?.email,
+        req.body?.promotion_id,
+        req.params?.slug,
+        req.query?.q,
+        req.query?.dpid,
+    ];
+    const identifierKey = identifiers
+        .map((value) => String(value || "").trim().toLowerCase())
+        .find(Boolean);
+
+    return identifierKey
+        ? `${getEndpointRateLimitKey(req)}:${identifierKey}`
+        : getEndpointRateLimitKey(req);
+};
+
 const defaultRateLimiter = createRateLimiter({
     windowMs: config.rateLimit.windowMs,
     limit: config.rateLimit.max,
@@ -36,16 +67,25 @@ const defaultRateLimiter = createRateLimiter({
 const publicReadRateLimiter = createRateLimiter({
     windowMs: config.rateLimit.publicWindowMs,
     limit: config.rateLimit.publicMax,
+    keyGenerator: getEndpointRateLimitKey,
 });
 
 const writeRateLimiter = createRateLimiter({
     windowMs: config.rateLimit.writeWindowMs,
     limit: config.rateLimit.writeMax,
+    keyGenerator: getRequestIdentifierRateLimitKey,
+});
+
+const imeiVerificationRateLimiter = createRateLimiter({
+    windowMs: config.rateLimit.imeiVerificationWindowMs,
+    limit: config.rateLimit.imeiVerificationMax,
+    keyGenerator: getRequestIdentifierRateLimitKey,
 });
 
 const recaptchaRateLimiter = createRateLimiter({
     windowMs: config.rateLimit.recaptchaWindowMs,
     limit: config.rateLimit.recaptchaMax,
+    keyGenerator: getRequestIdentifierRateLimitKey,
 });
 
 const getClientIp = (req) => {
@@ -81,6 +121,7 @@ module.exports = {
     defaultRateLimiter,
     publicReadRateLimiter,
     writeRateLimiter,
+    imeiVerificationRateLimiter,
     recaptchaRateLimiter,
     getClientIp,
     getIpDebugInfo,
