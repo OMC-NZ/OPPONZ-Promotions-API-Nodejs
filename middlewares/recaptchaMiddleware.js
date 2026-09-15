@@ -3,21 +3,40 @@ const { verifyRecaptchaToken } = require("../services/recaptchaService");
 const { logSecurityEvent } = require("../services/securityLogService");
 const { sendError } = require("../utils/apiResponse");
 
+const toRequestText = (value) => {
+    if (value === undefined || value === null) return "";
+
+    const valueType = typeof value;
+    if (valueType === "string" || valueType === "number" || valueType === "boolean" || valueType === "bigint") {
+        return String(value).trim();
+    }
+
+    return null;
+};
+
+const getFirstRequestText = (...values) => {
+    for (const value of values) {
+        if (value === undefined || value === null || value === "") continue;
+
+        return toRequestText(value);
+    }
+
+    return "";
+};
+
 const getTokenFromRequest = (req) => {
-    return String(
-        req.body?.recaptcha_token ||
-        req.get("x-recaptcha-token") ||
-        ""
-    ).trim();
+    return getFirstRequestText(
+        req.body?.recaptcha_token,
+        req.get("x-recaptcha-token")
+    );
 };
 
 const getActionFromRequest = (req) => {
-    return String(
-        req.body?.recaptcha_action ||
-        req.query?.recaptcha_action ||
-        req.get("x-recaptcha-action") ||
-        ""
-    ).trim();
+    return getFirstRequestText(
+        req.body?.recaptcha_action,
+        req.query?.recaptcha_action,
+        req.get("x-recaptcha-action")
+    );
 };
 
 const requireRecaptcha = (options = {}) => {
@@ -25,6 +44,14 @@ const requireRecaptcha = (options = {}) => {
         const strictProduction = isStrictProductionSecurity();
         const configuredAction = options.action;
         const requestAction = getActionFromRequest(req);
+
+        if (requestAction === null) {
+            return sendError(req, res, {
+                statusCode: 400,
+                message: "reCAPTCHA action is invalid.",
+                code: "RECAPTCHA_ACTION_INVALID",
+            });
+        }
 
         if (!isRecaptchaEnabled()) {
             req.recaptcha = {
@@ -37,6 +64,14 @@ const requireRecaptcha = (options = {}) => {
 
         const token = getTokenFromRequest(req);
         const expectedAction = strictProduction ? configuredAction : undefined;
+
+        if (token === null) {
+            return sendError(req, res, {
+                statusCode: 400,
+                message: "reCAPTCHA token is invalid.",
+                code: "RECAPTCHA_TOKEN_INVALID",
+            });
+        }
 
         if (strictProduction && configuredAction && !requestAction) {
             return sendError(req, res, {

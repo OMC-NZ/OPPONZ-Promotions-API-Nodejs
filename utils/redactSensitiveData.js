@@ -37,6 +37,19 @@ const addressKeys = new Set([
     "fulladdress",
 ]);
 
+const safeToString = (value) => {
+    if (typeof value === "string") return value;
+    if (typeof value === "symbol") return value.toString();
+    if (typeof value === "bigint") return value.toString();
+
+    try {
+        return String(value);
+    } catch (error) {
+        const typeName = value?.constructor?.name || typeof value;
+        return `[UNSTRINGIFIABLE:${typeName}]`;
+    }
+};
+
 const normalizeKey = (key) => String(key || "").replace(/[^a-zA-Z0-9_-]/g, "").toLowerCase();
 
 const shouldFullyRedact = (key) => {
@@ -49,13 +62,14 @@ const shouldFullyRedact = (key) => {
 };
 
 const maskEmail = (value) => {
-    const [localPart, domain] = String(value).split("@");
+    const [localPart, domain] = safeToString(value).split("@");
     if (!localPart || !domain) return REDACTED;
     return `${localPart.slice(0, 1)}***@${domain}`;
 };
 
 const maskTail = (value, visibleLength = 4) => {
-    const text = String(value);
+    const text = safeToString(value);
+    if (text.startsWith("[UNSTRINGIFIABLE:")) return REDACTED;
     if (text.length <= visibleLength) return "*".repeat(text.length);
     return `${"*".repeat(Math.max(text.length - visibleLength, 0))}${text.slice(-visibleLength)}`;
 };
@@ -75,7 +89,7 @@ const maskPartialValue = (key, value) => {
 };
 
 const keepFileNameOnly = (value) => {
-    const text = String(value);
+    const text = safeToString(value);
     const cleanText = text.split("?")[0].split("#")[0];
     const parts = cleanText.split(/[\\/]/).filter(Boolean);
     const fileName = parts[parts.length - 1];
@@ -105,7 +119,7 @@ const redactQueryValue = (key, value) => {
 };
 
 const redactUrlQuery = (value) => {
-    const text = String(value);
+    const text = safeToString(value);
     if (!text.includes("?")) return text;
 
     try {
@@ -122,7 +136,7 @@ const redactUrlQuery = (value) => {
 };
 
 const redactStringPatterns = (value) => {
-    return redactUrlQuery(String(value))
+    return redactUrlQuery(safeToString(value))
         .replace(/(authorization:\s*bearer\s+)[^\s,;]+/gi, `$1${REDACTED}`)
         .replace(/(x-api-key:\s*)[^\s,;]+/gi, `$1${REDACTED}`)
         .replace(/((?:password|token|secret|api[_-]?key)=)[^&\s,;]+/gi, `$1${REDACTED}`);

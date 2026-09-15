@@ -32,10 +32,21 @@ const getIpRateLimitKey = (req) => {
     return ipKeyGenerator(req.ip || req.socket?.remoteAddress || "");
 };
 
+const toRateLimitText = (value) => {
+    if (value === undefined || value === null || value === "") return "";
+
+    const valueType = typeof value;
+    if (valueType === "string" || valueType === "number" || valueType === "boolean" || valueType === "bigint") {
+        return String(value).trim().toLowerCase();
+    }
+
+    return "";
+};
+
 const getEndpointRateLimitKey = (req) => {
-    const endpointKey = String(req.originalUrl || req.path || "")
+    const endpointKey = toRateLimitText(req.originalUrl || req.path)
         .split("?")[0]
-        .toLowerCase();
+        || "unknown";
 
     return `${getIpRateLimitKey(req)}:${endpointKey}`;
 };
@@ -51,7 +62,7 @@ const getRequestIdentifierRateLimitKey = (req) => {
         req.query?.dpid,
     ];
     const identifierKey = identifiers
-        .map((value) => String(value || "").trim().toLowerCase())
+        .map(toRateLimitText)
         .find(Boolean);
 
     return identifierKey

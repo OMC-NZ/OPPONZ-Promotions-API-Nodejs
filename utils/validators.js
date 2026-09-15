@@ -20,6 +20,18 @@ const createValidator = (name, validate, options = {}) => ({
 
 const isEmptyValue = (value) => value === undefined || value === null || value === "";
 
+const toScalarText = (value) => {
+    const valueType = typeof value;
+
+    if (valueType === "string" || valueType === "number" || valueType === "boolean" || valueType === "bigint") {
+        return String(value);
+    }
+
+    return null;
+};
+
+const invalidFormat = (message = "Invalid format.") => ({ valid: false, message });
+
 const required = (message = "This field is required.") => createValidator("required", (value) => {
     if (isEmptyValue(value)) {
         return { valid: false, message };
@@ -33,7 +45,10 @@ const optional = () => createValidator("optional", () => ({ valid: true }), { op
 const email = (message = "Must be a valid email address.") => createValidator("email", (value) => {
     if (isEmptyValue(value)) return { valid: true };
 
-    const text = String(value).trim();
+    const scalarText = toScalarText(value);
+    if (scalarText === null) return invalidFormat(message);
+
+    const text = scalarText.trim();
     const valid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text);
 
     return valid
@@ -44,7 +59,10 @@ const email = (message = "Must be a valid email address.") => createValidator("e
 const imei = (message = "IMEI must be a 15-digit number starting with 86.") => createValidator("imei", (value) => {
     if (isEmptyValue(value)) return { valid: true };
 
-    const text = String(value).replace(/\s+/g, "").trim();
+    const scalarText = toScalarText(value);
+    if (scalarText === null) return invalidFormat(message);
+
+    const text = scalarText.replace(/\s+/g, "").trim();
     const valid = /^86\d{13}$/.test(text);
 
     return valid
@@ -55,7 +73,10 @@ const imei = (message = "IMEI must be a 15-digit number starting with 86.") => c
 const contact = (message = "Contact must contain digits only.") => createValidator("contact", (value) => {
     if (isEmptyValue(value)) return { valid: true };
 
-    const text = String(value).replace(/\s+/g, "").trim();
+    const scalarText = toScalarText(value);
+    if (scalarText === null) return invalidFormat(message);
+
+    const text = scalarText.replace(/\s+/g, "").trim();
     const valid = /^\d+$/.test(text);
 
     return valid
@@ -66,8 +87,27 @@ const contact = (message = "Contact must contain digits only.") => createValidat
 const postcode = (message = "Postcode must be a 4-digit string.") => createValidator("postcode", (value) => {
     if (isEmptyValue(value)) return { valid: true };
 
-    const text = String(value).trim();
+    const scalarText = toScalarText(value);
+    if (scalarText === null) return invalidFormat(message);
+
+    const text = scalarText.trim();
     const valid = /^\d{4}$/.test(text);
+
+    return valid
+        ? { valid: true, value: text }
+        : { valid: false, message };
+});
+
+const invoiceNumber = (
+    message = "Invoice number may contain letters, numbers, spaces, and hyphens only."
+) => createValidator("invoiceNumber", (value) => {
+    if (isEmptyValue(value)) return { valid: true };
+
+    const scalarText = toScalarText(value);
+    if (scalarText === null) return invalidFormat(message);
+
+    const text = scalarText.trim();
+    const valid = /^[A-Za-z0-9 -]+$/.test(text);
 
     return valid
         ? { valid: true, value: text }
@@ -79,7 +119,10 @@ const claimReference = (
 ) => createValidator("claimReference", (value) => {
     if (isEmptyValue(value)) return { valid: true };
 
-    const text = String(value).trim();
+    const scalarText = toScalarText(value);
+    if (scalarText === null) return invalidFormat(message);
+
+    const text = scalarText.trim();
     const promotionClaimPattern = /^OPNZPROCLM-\d{6}-.+/i;
     const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
     const valid = promotionClaimPattern.test(text) || uuidPattern.test(text);
@@ -95,13 +138,13 @@ const uppercaseFirstLetter = (word) => {
 };
 
 const titleCaseLetters = (value) => {
-    return String(value)
+    return value
         .toLocaleLowerCase("en-NZ")
         .replace(new RegExp(`[${MAORI_LETTERS}]+`, "g"), uppercaseFirstLetter);
 };
 
 const titleCaseWords = (value) => {
-    return String(value)
+    return value
         .trim()
         .replace(/\s+/g, " ")
         .split(" ")
@@ -124,7 +167,10 @@ const maoriEnglishName = () => {
     return createValidator("maoriEnglishName", (value) => {
         if (isEmptyValue(value)) return { valid: true };
 
-        const normalized = titleCaseWords(value);
+        const scalarText = toScalarText(value);
+        if (scalarText === null) return invalidFormat();
+
+        const normalized = titleCaseWords(scalarText);
         const valid = NAME_PATTERN.test(normalized);
 
         return valid
@@ -137,7 +183,10 @@ const street = () => {
     return createValidator("street", (value) => {
         if (isEmptyValue(value)) return { valid: true };
 
-        const normalized = titleCaseStreet(value);
+        const scalarText = toScalarText(value);
+        if (scalarText === null) return invalidFormat();
+
+        const normalized = titleCaseStreet(scalarText);
 
         return { valid: true, value: normalized };
     });
@@ -147,14 +196,19 @@ const titleCaseText = () => {
     return createValidator("titleCaseText", (value) => {
         if (isEmptyValue(value)) return { valid: true };
 
-        return { valid: true, value: titleCaseWords(value) };
+        const scalarText = toScalarText(value);
+        if (scalarText === null) return invalidFormat();
+
+        return { valid: true, value: titleCaseWords(scalarText) };
     });
 };
 
 const stringLength = ({ min = 0, max, message } = {}) => createValidator("stringLength", (value) => {
     if (isEmptyValue(value)) return { valid: true };
 
-    const text = String(value);
+    const text = toScalarText(value);
+    if (text === null) return invalidFormat(message);
+
     const validMin = text.length >= min;
     const validMax = max === undefined || text.length <= max;
 
@@ -166,7 +220,10 @@ const stringLength = ({ min = 0, max, message } = {}) => createValidator("string
 const integer = (message = "Must be an integer.") => createValidator("integer", (value) => {
     if (isEmptyValue(value)) return { valid: true };
 
-    const text = String(value).trim();
+    const scalarText = toScalarText(value);
+    if (scalarText === null) return invalidFormat(message);
+
+    const text = scalarText.trim();
     const valid = /^-?\d+$/.test(text);
 
     return valid
@@ -185,19 +242,25 @@ const oneOf = (allowedValues, message) => createValidator("oneOf", (value) => {
 const date = (message = "Must be a valid date.") => createValidator("date", (value) => {
     if (isEmptyValue(value)) return { valid: true };
 
-    const valid = moment(String(value), moment.ISO_8601, true).isValid();
+    const text = toScalarText(value);
+    if (text === null) return invalidFormat(message);
+
+    const valid = moment(text, moment.ISO_8601, true).isValid();
 
     return valid
-        ? { valid: true, value: String(value) }
+        ? { valid: true, value: text }
         : { valid: false, message };
 });
 
 const url = (message = "Must be a valid URL.") => createValidator("url", (value) => {
     if (isEmptyValue(value)) return { valid: true };
 
+    const text = toScalarText(value);
+    if (text === null) return invalidFormat(message);
+
     try {
-        new URL(String(value));
-        return { valid: true, value: String(value) };
+        new URL(text);
+        return { valid: true, value: text };
     } catch (error) {
         return { valid: false, message };
     }
@@ -209,7 +272,10 @@ const fileExtension = (
 ) => createValidator("fileExtension", (value) => {
     if (isEmptyValue(value)) return { valid: true };
 
-    const text = String(value).trim();
+    const scalarText = toScalarText(value);
+    if (scalarText === null) return invalidFormat(message);
+
+    const text = scalarText.trim();
     const queryIndex = text.search(/[?#]/);
     const pathPart = queryIndex === -1 ? text : text.slice(0, queryIndex);
     const fileName = pathPart.split(/[\\/]/).pop() || "";
@@ -246,6 +312,7 @@ module.exports = {
     imei,
     contact,
     postcode,
+    invoiceNumber,
     claimReference,
     maoriEnglishName,
     street,

@@ -15,7 +15,17 @@ const runValidators = ({ value, validators }) => {
     let currentValue = value;
 
     for (const validator of validators) {
-        const result = validator.validate(currentValue);
+        let result;
+
+        try {
+            result = validator.validate(currentValue);
+        } catch (error) {
+            return {
+                valid: false,
+                validator: validator.name,
+                message: "Invalid format.",
+            };
+        }
 
         if (!result.valid) {
             return {
