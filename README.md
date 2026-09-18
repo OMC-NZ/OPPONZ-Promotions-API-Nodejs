@@ -6,10 +6,12 @@ Node.js/Express API for OPPO NZ promotions, claims, events, devices, gifts, and 
 
 ```bash
 npm run dev
+npm run dev:prod-env
 npm start
 ```
 
 - `npm run dev` starts the API in development mode.
+- `npm run dev:prod-env` starts the API locally with `NODE_ENV=production`, loads `.env.test.prod`, and sets `LOCAL_PRODUCTION_TEST=true`. Use this for local production-environment testing without using the real `.env.production` file.
 - `npm start` starts the API in production mode.
 
 ## Environment Files
@@ -18,6 +20,7 @@ Environment files are intentionally ignored by Git. When `.env`, `.env.developme
 
 - `.env` contains shared/base settings.
 - `.env.development` contains local development settings.
+- `.env.test.prod` contains local production-environment test settings used by `npm run dev:prod-env`.
 - `.env.production` contains production settings.
 
 ## Security

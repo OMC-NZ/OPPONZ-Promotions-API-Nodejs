@@ -89,7 +89,7 @@ router.route("/")
                 city: [optional(), titleCaseText(), stringLength({ max: 255 })],
                 postcode: [optional(), postcode()],
                 instructions: [optional(), stringLength({ max: 255 })],
-                invoicenumber: [optional(), invoiceNumber(), stringLength({ max: 100 })],
+                invoicenumber: [required(), invoiceNumber(), stringLength({ max: 100 })],
                 gift_alias: [optional(), stringLength({ max: 45 })],
                 recaptcha_token: [optional()],
                 recaptcha_action: recaptchaAction(["claim_submit"]),

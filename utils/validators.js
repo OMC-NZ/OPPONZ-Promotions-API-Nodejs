@@ -99,7 +99,7 @@ const postcode = (message = "Postcode must be a 4-digit string.") => createValid
 });
 
 const invoiceNumber = (
-    message = "Invoice number may contain letters, numbers, spaces, and hyphens only."
+    message = "Invoice number may contain letters, numbers, and hyphens only."
 ) => createValidator("invoiceNumber", (value) => {
     if (isEmptyValue(value)) return { valid: true };
 
@@ -107,7 +107,7 @@ const invoiceNumber = (
     if (scalarText === null) return invalidFormat(message);
 
     const text = scalarText.trim();
-    const valid = /^[A-Za-z0-9 -]+$/.test(text);
+    const valid = /[0-9]/.test(text) && /^[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*$/.test(text);
 
     return valid
         ? { valid: true, value: text }

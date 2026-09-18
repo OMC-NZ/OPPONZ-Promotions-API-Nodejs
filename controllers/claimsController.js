@@ -167,6 +167,7 @@ const submitClaim = async (req, res, next) => {
         const purchaseDateInput = req.body.purchase_date;
         const receiptUrl = req.body.receipt_url;
         const screenshotUrl = req.body.screenshot_url;
+        const invoiceCode = normalizeText(req.body.invoicenumber);
         const receiptFile = getUploadedFile(req, "receipt");
         const screenshotFile = getUploadedFile(req, "screenshot");
         const firstName = req.body.first_name;
@@ -198,6 +199,7 @@ const submitClaim = async (req, res, next) => {
             ["suburb", suburb],
             ["city", city],
             ["postcode", postcode],
+            ["invoicenumber", invoiceCode],
             ["gift_alias", selectedGiftAlias],
         ].filter(([, value]) => value === undefined || value === null || value === "");
         let storedReceiptUrl = normalizeText(receiptUrl);
@@ -322,6 +324,7 @@ const submitClaim = async (req, res, next) => {
             status: CLAIM_STATUS_PENDING,
             receipt_url: storedReceiptUrl,
             screenshot_url: storedScreenshotUrl,
+            invoicecode: invoiceCode,
             email_status: EMAIL_STATUS_FAILED,
             created_at: now,
             updated_at: now,

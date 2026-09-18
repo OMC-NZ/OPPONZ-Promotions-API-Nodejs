@@ -35,6 +35,10 @@ module.exports = (sequelize) => {
             type: DataTypes.STRING(255),
             allowNull: false,
         },
+        invoicecode: {
+            type: DataTypes.STRING(255),
+            allowNull: false,
+        },
         email_status: {
             type: DataTypes.TINYINT(1),
             allowNull: false,
