@@ -42,6 +42,31 @@ const required = (message = "This field is required.") => createValidator("requi
 
 const optional = () => createValidator("optional", () => ({ valid: true }), { optional: true });
 
+const giftAliases = () => createValidator("giftAliases", (value) => {
+    let aliases = value;
+
+    // Multipart fields carry arrays as JSON text.
+    if (typeof aliases === "string") {
+        try {
+            aliases = JSON.parse(aliases);
+        } catch (error) {
+            return invalidFormat("Gift aliases must be a non-empty array of strings.");
+        }
+    }
+
+    if (!Array.isArray(aliases) || aliases.length === 0 || aliases.some((alias) => (
+        typeof alias !== "string" || alias.trim().length === 0 || alias.length > 45
+    ))) {
+        return invalidFormat("Gift aliases must be a non-empty array of strings, each up to 45 characters.");
+    }
+
+    if (new Set(aliases).size !== aliases.length) {
+        return invalidFormat("Duplicate gift aliases are not allowed.");
+    }
+
+    return { valid: true, value: aliases };
+});
+
 const email = (message = "Must be a valid email address.") => createValidator("email", (value) => {
     if (isEmptyValue(value)) return { valid: true };
 
@@ -308,6 +333,7 @@ const recaptchaToken = () => {
 module.exports = {
     required,
     optional,
+    giftAliases,
     email,
     imei,
     contact,

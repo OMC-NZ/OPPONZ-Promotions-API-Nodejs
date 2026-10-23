@@ -8,6 +8,7 @@ const config = require("../config/envConfig");
 const {
     email,
     fileExtension,
+    giftAliases,
     claimReference,
     imei,
     invoiceNumber,
@@ -90,7 +91,7 @@ router.route("/")
                 postcode: [optional(), postcode()],
                 instructions: [optional(), stringLength({ max: 255 })],
                 invoicenumber: [required(), invoiceNumber(), stringLength({ max: 100 })],
-                gift_alias: [optional(), stringLength({ max: 45 })],
+                gift_alias: [required(), giftAliases()],
                 recaptcha_token: [optional()],
                 recaptcha_action: recaptchaAction(["claim_submit"]),
             },

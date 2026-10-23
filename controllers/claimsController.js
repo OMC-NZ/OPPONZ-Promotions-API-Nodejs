@@ -181,7 +181,7 @@ const submitClaim = async (req, res, next) => {
             postcode,
             instructions,
         } = req.body;
-        const selectedGiftAlias = req.body.gift_alias;
+        const selectedGiftAliases = req.body.gift_alias;
         const city = normalizeText(req.body.city);
         const now = getNewZealandTime();
         const purchaseDate = toNewZealandDateTime(purchaseDateInput);
@@ -200,7 +200,7 @@ const submitClaim = async (req, res, next) => {
             ["city", city],
             ["postcode", postcode],
             ["invoicenumber", invoiceCode],
-            ["gift_alias", selectedGiftAlias],
+            ["gift_alias", selectedGiftAliases],
         ].filter(([, value]) => value === undefined || value === null || value === "");
         let storedReceiptUrl = normalizeText(receiptUrl);
         let storedScreenshotUrl = normalizeText(screenshotUrl);
@@ -255,7 +255,7 @@ const submitClaim = async (req, res, next) => {
             imei,
             purchaseDateInput,
             promotionId,
-            giftAlias: selectedGiftAlias,
+            giftAliases: selectedGiftAliases,
             transaction,
         });
 
@@ -271,10 +271,11 @@ const submitClaim = async (req, res, next) => {
                 debug: {
                     reason: eligibility.reason,
                     promotion_id: promotionId,
-                    gift_alias: selectedGiftAlias,
+                    gift_alias: selectedGiftAliases,
                     hasPromotion: Boolean(eligibility.promotion),
                     hasDevice: Boolean(eligibility.device),
-                    hasGift: Boolean(eligibility.gift),
+                    missingGiftAliases: eligibility.missingGiftAliases,
+                    unlinkedGiftAliases: eligibility.unlinkedGiftAliases,
                     deviceModel: eligibility.device?.model,
                     deviceChannelCode: eligibility.device?.channel_code,
                     deviceRedemptionStatus: eligibility.device?.redemption_status,
@@ -285,7 +286,7 @@ const submitClaim = async (req, res, next) => {
             });
         }
 
-        const { device, gift, promotion } = eligibility;
+        const { device, gifts, promotion } = eligibility;
 
         if (receiptFile) {
             const receiptUpload = await uploadClaimFile({
@@ -341,10 +342,10 @@ const submitClaim = async (req, res, next) => {
             updated_at: now,
         }, { transaction });
 
-        await Claim_Gifts.create({
+        await Claim_Gifts.bulkCreate(gifts.map((gift) => ({
             claim_id: claimId,
             gift_id: gift.id,
-        }, { transaction });
+        })), { transaction });
 
         await device.update({
             redemption_status: DEVICE_REDEMPTION_STATUS_CLAIMED,
@@ -359,7 +360,7 @@ const submitClaim = async (req, res, next) => {
             includeRequestId: false,
             data: {
                 claim_id: claimId,
-                gift: formatGiftName(gift),
+                gift: gifts.map(formatGiftName).join(", "),
             },
         });
     } catch (error) {

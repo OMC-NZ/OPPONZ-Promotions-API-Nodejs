@@ -23,6 +23,22 @@ Environment files are intentionally ignored by Git. When `.env`, `.env.developme
 - `.env.test.prod` contains local production-environment test settings used by `npm run dev:prod-env`.
 - `.env.production` contains production settings.
 
+## Claim Gifts
+
+`POST /api/claims` requires `gift_alias` to be a non-empty array of unique gift aliases:
+
+```json
+{ "gift_alias": ["earbuds-white", "watch-black"] }
+```
+
+For multipart submissions with files, send the array as JSON text:
+
+```javascript
+formData.append("gift_alias", JSON.stringify(["earbuds-white", "watch-black"]));
+```
+
+Each alias must be a string of up to 45 characters and match a gift linked to the submitted promotion. A single alias string is not accepted. All selected gifts are saved to `Claim_Gifts` in the claim transaction and included in the confirmation email. The submission response keeps `data.gift` as a string containing all selected gift names, separated by commas.
+
 ## Security
 
 This API includes security middleware and operational safeguards for rate limiting, trusted proxy IP handling, CORS, Helmet security headers, API key protection, reCAPTCHA verification, request/error/security logs, production error email alerts, unified error responses, response field allowlists, sensitive log redaction, route/method security logging, and reusable request validation.

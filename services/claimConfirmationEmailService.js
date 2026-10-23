@@ -184,20 +184,24 @@ const loadClaimEmailData = async (claimId) => {
     const claim = await Claims.findByPk(claimId);
     if (!claim) return null;
 
-    const [customer, address, claimGift] = await Promise.all([
+    const [customer, address, claimGifts] = await Promise.all([
         Customers.findByPk(claim.customer_id),
         Deliver_Addresses.findOne({ where: { claim_id: claimId, is_current: 1 } }),
-        Claim_Gifts.findOne({ where: { claim_id: claimId } }),
+        Claim_Gifts.findAll({
+            where: { claim_id: claimId },
+            include: [{ model: Gifts, as: "gift" }],
+            order: [["id", "ASC"]],
+        }),
     ]);
-    const gift = claimGift ? await Gifts.findByPk(claimGift.gift_id) : null;
+    const gifts = claimGifts.map((item) => item.gift).filter(Boolean);
 
     return {
         claim,
         customer,
         address,
-        gift,
+        gifts,
         fullName: formatFullName(customer),
-        giftName: formatGiftName(gift),
+        giftName: gifts.map(formatGiftName).filter(Boolean).join(", "),
         deliveryAddress: formatDeliveryAddress(address),
     };
 };

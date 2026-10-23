@@ -57,7 +57,7 @@ const checkPromotionEligibility = async ({
     imei,
     purchaseDateInput,
     promotionId,
-    giftAlias,
+    giftAliases,
     transaction,
 }) => {
     const {
@@ -69,19 +69,23 @@ const checkPromotionEligibility = async ({
     const requestTime = getNewZealandTime();
     const purchaseDate = toNewZealandDateTime(purchaseDateInput);
 
-    const [promotion, device, gift] = await Promise.all([
+    const [promotion, device, matchingGifts] = await Promise.all([
         Promotions.findByPk(promotionId, { transaction }),
         Devices.findOne({
             where: { imei },
             transaction,
         }),
-        Gifts.findOne({
-            where: { alias: giftAlias },
+        Gifts.findAll({
+            where: { alias: { [Op.in]: giftAliases } },
             transaction,
         }),
     ]);
+    const giftsByAlias = new Map(matchingGifts.map((gift) => [gift.alias, gift]));
+    const missingGiftAliases = giftAliases.filter((alias) => !giftsByAlias.has(alias));
+    const gifts = giftAliases.filter((alias) => giftsByAlias.has(alias))
+        .map((alias) => giftsByAlias.get(alias));
 
-    if (!promotion || !device || !gift) {
+    if (!promotion || !device || missingGiftAliases.length > 0) {
         return {
             eligible: false,
             reason: !promotion
@@ -91,7 +95,8 @@ const checkPromotionEligibility = async ({
                     : "GIFT_NOT_FOUND",
             promotion,
             device,
-            gift,
+            gifts,
+            missingGiftAliases,
         };
     }
 
@@ -101,7 +106,7 @@ const checkPromotionEligibility = async ({
             reason: "DEVICE_ALREADY_REDEEMED",
             promotion,
             device,
-            gift,
+            gifts,
         };
     }
 
@@ -121,28 +126,33 @@ const checkPromotionEligibility = async ({
             reason: "PROMOTION_NOT_ELIGIBLE_FOR_DEVICE_OR_DATE",
             promotion,
             device,
-            gift,
+            gifts,
             eligiblePromotionIds,
             purchaseDate,
             requestTime,
         };
     }
 
-    const promotionGift = await Promotion_Gifts.findOne({
+    const promotionGifts = await Promotion_Gifts.findAll({
         where: {
             promotion_id: promotionId,
-            gift_id: gift.id,
+            gift_id: { [Op.in]: gifts.map((gift) => gift.id) },
         },
         transaction,
     });
 
-    if (!promotionGift) {
+    const linkedGiftIds = new Set(promotionGifts.map((item) => item.gift_id));
+    const unlinkedGiftAliases = gifts.filter((gift) => !linkedGiftIds.has(gift.id))
+        .map((gift) => gift.alias);
+
+    if (unlinkedGiftAliases.length > 0) {
         return {
             eligible: false,
             reason: "GIFT_NOT_LINKED_TO_PROMOTION",
             promotion,
             device,
-            gift,
+            gifts,
+            unlinkedGiftAliases,
         };
     }
 
@@ -150,8 +160,8 @@ const checkPromotionEligibility = async ({
         eligible: true,
         promotion,
         device,
-        gift,
-        promotionGift,
+        gifts,
+        promotionGifts,
         eligiblePromotionIds,
         purchaseDate,
         requestTime,
