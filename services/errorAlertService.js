@@ -1,10 +1,10 @@
-const nodemailer = require("nodemailer");
+const { getTransporter } = require("./mailService");
+const { ExpiringCache } = require("../utils/expiringCache");
 const config = require("../config/envConfig");
 const { getErrorLocation } = require("../utils/errorDetails");
 const { redactSensitiveData, redactError } = require("../utils/redactSensitiveData");
 
-const sentAtByFingerprint = new Map();
-let transporter;
+const sentAtByFingerprint = new ExpiringCache();
 
 const isProduction = config.environment === "production";
 
@@ -16,25 +16,9 @@ const isConfigured = () => Boolean(
     config.email.adminEmail
 );
 
-const getTransporter = () => {
-    if (!transporter) {
-        transporter = nodemailer.createTransport({
-            host: config.email.host,
-            port: config.email.port,
-            secure: config.email.port === 465,
-            auth: {
-                user: config.email.user,
-                pass: config.email.pass,
-            },
-        });
-    }
-
-    return transporter;
-};
-
 const getErrorFingerprint = ({ error, status, req }) => {
     const method = req?.method || "PROCESS";
-    const path = req?.originalUrl || req?.url || "process";
+    const path = req?.route?.path || (req?.originalUrl || req?.url || "process").split("?")[0];
     const message = error?.message || "Unknown error";
     return `${status}:${method}:${path}:${message}`;
 };
@@ -86,7 +70,7 @@ const alertError = async ({ error, status = 500, req, requestId }) => {
         return false;
     }
 
-    sentAtByFingerprint.set(fingerprint, now);
+    sentAtByFingerprint.set(fingerprint, now, config.email.alertCooldownMs);
 
     try {
         await getTransporter().sendMail({

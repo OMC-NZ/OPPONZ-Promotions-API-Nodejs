@@ -1,5 +1,6 @@
 const dotenv = require("dotenv");
 const path = require("path");
+const fs = require("fs");
 
 const baseEnvPath = path.resolve(__dirname, "../.env");
 dotenv.config({ path: baseEnvPath });
@@ -63,8 +64,36 @@ const parseList = (value) => {
         .filter(Boolean);
 };
 
+const buildDatabaseConfig = (prefix, values = process.env) => ({
+    host: values[`${prefix}_HOST`],
+    port: parseInteger(values[`${prefix}_PORT`], 3306),
+    user: values[`${prefix}_USER`],
+    pass: values[`${prefix}_PASS`],
+    name: values[`${prefix}_NAME`],
+    poolMax: parseInteger(values[`${prefix}_POOL_MAX`], 10),
+    poolMin: parseInteger(values[`${prefix}_POOL_MIN`], 0),
+    acquire: parseInteger(values[`${prefix}_POOL_ACQUIRE`], 30000),
+    idle: parseInteger(values[`${prefix}_POOL_IDLE`], 10000),
+    connectTimeout: parseInteger(values[`${prefix}_CONNECT_TIMEOUT`], 20000),
+});
+
+const db = buildDatabaseConfig("DB");
+let currentListDatabaseConfig;
+
+const getCurrentListDatabaseConfig = () => {
+    if (runtimeEnvironment !== "development") return db;
+    if (!currentListDatabaseConfig) {
+        // Parse in isolation for selected DB read endpoints without changing the development environment.
+        const productionEnvPath = path.resolve(__dirname, "../.env.production");
+        const values = dotenv.parse(fs.readFileSync(productionEnvPath));
+        currentListDatabaseConfig = buildDatabaseConfig("DB", values);
+    }
+    return currentListDatabaseConfig;
+};
+
 module.exports = {
     environment: runtimeEnvironment,
+    getCurrentListDatabaseConfig,
     envFiles: {
         base: baseEnvPath,
         environment: environmentEnvPath,
@@ -90,30 +119,10 @@ module.exports = {
         headersTimeoutMs: parseInteger(process.env.SERVER_HEADERS_TIMEOUT_MS, 10000),
         keepAliveTimeoutMs: parseInteger(process.env.SERVER_KEEP_ALIVE_TIMEOUT_MS, 5000),
     },
-    db: {
-        host: process.env.DB_HOST,
-        port: parseInteger(process.env.DB_PORT, 3306),
-        user: process.env.DB_USER,
-        pass: process.env.DB_PASS,
-        name: process.env.DB_NAME,
-        poolMax: parseInteger(process.env.DB_POOL_MAX, 10),
-        poolMin: parseInteger(process.env.DB_POOL_MIN, 0),
-        acquire: parseInteger(process.env.DB_POOL_ACQUIRE, 30000),
-        idle: parseInteger(process.env.DB_POOL_IDLE, 10000),
-        connectTimeout: parseInteger(process.env.DB_CONNECT_TIMEOUT, 20000),
-    },
+    db,
     ddb: {
-        host: process.env.DDB_HOST,
-        port: parseInteger(process.env.DDB_PORT, 3306),
-        user: process.env.DDB_USER,
-        pass: process.env.DDB_PASS,
-        name: process.env.DDB_NAME,
+        ...buildDatabaseConfig("DDB"),
         required: process.env.DDB_REQUIRED === "true",
-        poolMax: parseInteger(process.env.DDB_POOL_MAX, 10),
-        poolMin: parseInteger(process.env.DDB_POOL_MIN, 0),
-        acquire: parseInteger(process.env.DDB_POOL_ACQUIRE, 30000),
-        idle: parseInteger(process.env.DDB_POOL_IDLE, 10000),
-        connectTimeout: parseInteger(process.env.DDB_CONNECT_TIMEOUT, 20000),
     },
     email: {
         host: process.env.EMAIL_HOST,
@@ -123,7 +132,7 @@ module.exports = {
         from: process.env.EMAIL_FROM,
         serviceEmail: process.env.EMAIL_USER,
         trackingUrl: process.env.CLAIM_TRACKING_URL || "https://oppopromotions.co.nz",
-        adminEmail: process.env.EMAIL_ADMIN || process.env.EMAIL_ADMIN,
+        adminEmail: process.env.EMAIL_ADMIN,
         alertCooldownMs: parseInteger(process.env.ERROR_ALERT_COOLDOWN_MS, 300000),
     },
     nzPost: {

@@ -2,6 +2,7 @@ const { rateLimit, ipKeyGenerator } = require("express-rate-limit");
 const config = require("./envConfig");
 const { logSecurityEvent } = require("../services/securityLogService");
 const { sendError } = require("../utils/apiResponse");
+const { normalizeText } = require("../utils/text");
 
 const jsonRateLimitHandler = (req, res) => {
     logSecurityEvent(req, "RATE_LIMIT_EXCEEDED", {
@@ -32,16 +33,7 @@ const getIpRateLimitKey = (req) => {
     return ipKeyGenerator(req.ip || req.socket?.remoteAddress || "");
 };
 
-const toRateLimitText = (value) => {
-    if (value === undefined || value === null || value === "") return "";
-
-    const valueType = typeof value;
-    if (valueType === "string" || valueType === "number" || valueType === "boolean" || valueType === "bigint") {
-        return String(value).trim().toLowerCase();
-    }
-
-    return "";
-};
+const toRateLimitText = (value) => normalizeText(value).toLowerCase();
 
 const getEndpointRateLimitKey = (req) => {
     const endpointKey = toRateLimitText(req.originalUrl || req.path)

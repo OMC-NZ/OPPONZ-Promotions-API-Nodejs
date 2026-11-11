@@ -15,7 +15,9 @@ const {
 const { requestContext } = require("./middlewares/requestContext");
 const { notFoundHandler, errorHandler } = require("./middlewares/errorHandler");
 const { requestLogger } = require("./middlewares/requestLogger");
-const { startLogCleanup } = require("./services/logService");
+const { startLogCleanup, flushLogs } = require("./services/logService");
+const { closeMailTransporter } = require("./services/mailService");
+const { normalizeText } = require("./utils/text");
 const { alertError } = require("./services/errorAlertService");
 const { checkProductionSecurityConfig } = require("./config/startupSecurityCheck");
 
@@ -24,11 +26,11 @@ const app = express();
 app.disable("x-powered-by");
 app.set("trust proxy", config.app.trustProxy);
 
+app.use(requestContext);
+app.use(requestLogger);
 app.use(helmet(getHelmetOptions()));
 app.use(cors(getCorsOptions()));
 app.use(enforceHttps);
-app.use(requestContext);
-app.use(requestLogger);
 app.use(express.json({ limit: config.app.bodyLimit }));
 app.use(express.urlencoded({ extended: true, limit: config.app.bodyLimit }));
 
@@ -54,13 +56,19 @@ const startServer = async () => {
     app.use(notFoundHandler);
     app.use(errorHandler);
 
-    server = app.listen(PORT, () => {
-      console.log(`Server is running ${isDevelopment ? "Development" : "Production"} Mode on the port: ${PORT}`);
-      console.log(`Server time check: local=${new Date().toString()}`);
-      console.log(`Trust proxy setting: ${JSON.stringify(config.app.trustProxy)}`);
-      console.log(`Server timeouts: request=${server.requestTimeout}ms, headers=${server.headersTimeout}ms, keepAlive=${server.keepAliveTimeout}ms`);
+    await new Promise((resolve, reject) => {
+      server = app.listen(PORT);
+      server.once("error", reject);
+      server.once("listening", () => {
+        server.removeListener("error", reject);
+        resolve();
+      });
+      applyServerTimeouts(server);
     });
-    applyServerTimeouts(server);
+    console.log(`Server is running ${isDevelopment ? "Development" : "Production"} Mode on the port: ${PORT}`);
+    console.log(`Server time check: local=${new Date().toString()}`);
+    console.log(`Trust proxy setting: ${JSON.stringify(config.app.trustProxy)}`);
+    console.log(`Server timeouts: request=${server.requestTimeout}ms, headers=${server.headersTimeout}ms, keepAlive=${server.keepAliveTimeout}ms`);
   } catch (error) {
     console.error("Failed to start server:", error);
     await alertError({
@@ -69,21 +77,32 @@ const startServer = async () => {
       requestId: "startup",
     });
     await closeDatabases();
+    closeMailTransporter();
+    await flushLogs();
     process.exit(1);
   }
 };
 
+let shuttingDown = false;
 const gracefulShutdown = async () => {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  const deadline = setTimeout(() => process.exit(1), 10000);
+  deadline.unref();
   console.log("Shutting down gracefully...");
 
   if (!server) {
     await closeDatabases();
+    closeMailTransporter();
+    await flushLogs();
     process.exit(0);
   }
 
   server.close(async () => {
     console.log("Server closed.");
     await closeDatabases();
+    closeMailTransporter();
+    await flushLogs();
     process.exit(0);
   });
 };
@@ -102,7 +121,7 @@ process.on("uncaughtException", async (err) => {
 });
 
 process.on("unhandledRejection", async (reason) => {
-  const error = reason instanceof Error ? reason : new Error(String(reason));
+  const error = reason instanceof Error ? reason : new Error(normalizeText(reason) || "Unhandled non-error rejection");
   console.error("Unhandled Rejection:", error);
   await alertError({
     error,

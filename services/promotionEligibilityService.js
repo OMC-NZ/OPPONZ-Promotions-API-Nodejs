@@ -4,16 +4,18 @@ const { getNewZealandTime, toNewZealandDateTime } = require("../utils/nzTimeZone
 
 const DEVICE_REDEMPTION_STATUS_AVAILABLE = 0;
 
-const findEligiblePromotionIdsForDevice = async ({
+const findEligiblePromotionChannelsForDevice = async ({
     device,
     purchaseDate,
     requestTime,
     transaction,
+    attributes = ["promotion_id", "channel_code", "start_date", "end_date", "redeem_end_date"],
+    modelContext = { sequelize, models: models.active },
 }) => {
     const {
         Promotion_Devices,
         Promotion_Channels,
-    } = models.active;
+    } = modelContext.models;
 
     const promotionDevices = await Promotion_Devices.findAll({
         attributes: ["promotion_id"],
@@ -28,11 +30,11 @@ const findEligiblePromotionIdsForDevice = async ({
 
     if (modelPromotionIds.length === 0) return [];
 
-    const purchaseDateLiteral = sequelize.escape(purchaseDate);
-    const requestTimeLiteral = sequelize.escape(requestTime);
+    const purchaseDateLiteral = modelContext.sequelize.escape(purchaseDate);
+    const requestTimeLiteral = modelContext.sequelize.escape(requestTime);
 
     const promotionChannels = await Promotion_Channels.findAll({
-        attributes: ["promotion_id", "channel_code", "start_date", "end_date", "redeem_end_date"],
+        attributes,
         where: {
             promotion_id: {
                 [Op.in]: modelPromotionIds,
@@ -49,7 +51,12 @@ const findEligiblePromotionIdsForDevice = async ({
         raw: true,
     });
 
-    return [...new Set(promotionChannels.map((item) => item.promotion_id))]
+    return promotionChannels;
+};
+
+const findEligiblePromotionIdsForDevice = async (options) => {
+    const channels = await findEligiblePromotionChannelsForDevice(options);
+    return [...new Set(channels.map((item) => item.promotion_id))]
         .sort((left, right) => Number(right) - Number(left));
 };
 
@@ -59,18 +66,17 @@ const checkPromotionEligibility = async ({
     promotionId,
     giftAliases,
     transaction,
+    promotionContext = { sequelize, models: models.active },
 }) => {
-    const {
-        Devices,
-        Gifts,
-        Promotions,
-        Promotion_Gifts,
-    } = models.active;
+    const { Devices, Gifts } = models.active;
+    const { Promotions, Promotion_Gifts, Gifts: promotionCatalogGifts } = promotionContext.models;
+    // Transactions belong to one connection and must not cross the DB/DDB boundary.
+    const promotionTransaction = promotionContext.sequelize === sequelize ? transaction : undefined;
     const requestTime = getNewZealandTime();
     const purchaseDate = toNewZealandDateTime(purchaseDateInput);
 
     const [promotion, device, matchingGifts] = await Promise.all([
-        Promotions.findByPk(promotionId, { transaction }),
+        Promotions.findByPk(promotionId, { transaction: promotionTransaction }),
         Devices.findOne({
             where: { imei },
             transaction,
@@ -114,7 +120,8 @@ const checkPromotionEligibility = async ({
         device,
         purchaseDate,
         requestTime,
-        transaction,
+        transaction: promotionTransaction,
+        modelContext: promotionContext,
     });
     const promotionIsEligible = eligiblePromotionIds
         .map((item) => String(item))
@@ -133,17 +140,21 @@ const checkPromotionEligibility = async ({
         };
     }
 
-    const promotionGifts = await Promotion_Gifts.findAll({
+    const catalogGifts = promotionCatalogGifts === Gifts ? gifts : await promotionCatalogGifts.findAll({
+        where: { alias: { [Op.in]: giftAliases } },
+        transaction: promotionTransaction,
+    });
+    const catalogGiftIdsByAlias = new Map(catalogGifts.map((gift) => [gift.alias, gift.id]));
+    const promotionGifts = catalogGifts.length === 0 ? [] : await Promotion_Gifts.findAll({
         where: {
             promotion_id: promotionId,
-            gift_id: { [Op.in]: gifts.map((gift) => gift.id) },
+            gift_id: { [Op.in]: catalogGifts.map((gift) => gift.id) },
         },
-        transaction,
+        transaction: promotionTransaction,
     });
 
     const linkedGiftIds = new Set(promotionGifts.map((item) => item.gift_id));
-    const unlinkedGiftAliases = gifts.filter((gift) => !linkedGiftIds.has(gift.id))
-        .map((gift) => gift.alias);
+    const unlinkedGiftAliases = giftAliases.filter((alias) => !linkedGiftIds.has(catalogGiftIdsByAlias.get(alias)));
 
     if (unlinkedGiftAliases.length > 0) {
         return {
@@ -171,4 +182,5 @@ const checkPromotionEligibility = async ({
 module.exports = {
     checkPromotionEligibility,
     findEligiblePromotionIdsForDevice,
+    findEligiblePromotionChannelsForDevice,
 };

@@ -1,25 +1,10 @@
-const crypto = require("crypto");
 const path = require("path");
 const { PutObjectCommand, S3Client } = require("@aws-sdk/client-s3");
 const config = require("../config/envConfig");
-
-const allowedMimeTypes = new Set([
-    "image/jpeg",
-    "image/png",
-    "application/pdf",
-]);
-
-const allowedExtensions = new Set([
-    ".jpg",
-    ".jpeg",
-    ".png",
-    ".pdf",
-]);
-
-const claimUploadFolders = {
-    promotions: "claims/promotions",
-    events: "claims/events",
-};
+const {
+    allowedMimeTypes, allowedExtensions, normalizeClaimType,
+    normalizePathSegment, buildClaimObjectKey, validateClaimFile,
+} = require("../utils/claimFilePolicy");
 
 let r2Client;
 
@@ -54,78 +39,19 @@ const getR2Client = () => {
     return r2Client;
 };
 
-const normalizeClaimType = (claimType) => {
-    const key = String(claimType || "").trim().toLowerCase();
-    return claimUploadFolders[key] ? key : "promotions";
-};
-
-const normalizeSlugPathSegment = (slug) => {
-    const value = String(slug || "").trim().replace(/^\/+|\/+$/g, "");
-
-    if (!value || value.includes("..") || /[\\/]/.test(value)) {
-        const error = new Error("R2 upload slug is required.");
-        error.statusCode = 500;
-        throw error;
-    }
-
-    return value;
-};
-
-const getSafeExtension = (originalName) => {
-    const extension = path.extname(String(originalName || "")).toLowerCase();
-    return extension || "";
-};
-
-const buildObjectKey = ({ claimType, slug, originalName }) => {
-    const folder = claimUploadFolders[normalizeClaimType(claimType)];
-    const slugSegment = normalizeSlugPathSegment(slug);
-    const extension = getSafeExtension(originalName);
-
-    return `${folder}/${slugSegment}/${crypto.randomUUID()}${extension}`;
-};
-
 const buildPublicUrl = (key) => {
     if (!config.r2.publicBaseUrl) return null;
     return `${String(config.r2.publicBaseUrl).replace(/\/+$/, "")}/${key}`;
 };
 
 const validateFileForR2 = (file) => {
-    if (!file) {
-        const error = new Error("No file uploaded.");
-        error.statusCode = 400;
-        throw error;
-    }
-
-    if (!file.buffer || file.size <= 0) {
-        const error = new Error("Uploaded file is empty.");
-        error.statusCode = 400;
-        throw error;
-    }
-
-    if (file.size > config.r2.uploadMaxBytes) {
-        const error = new Error("File is too large.");
-        error.statusCode = 400;
-        throw error;
-    }
-
-    if (!allowedMimeTypes.has(file.mimetype)) {
-        const error = new Error("Unsupported file type.");
-        error.statusCode = 400;
-        throw error;
-    }
-
-    const extension = getSafeExtension(file.originalname);
-    if (!allowedExtensions.has(extension)) {
-        const error = new Error("Unsupported file extension.");
-        error.statusCode = 400;
-        throw error;
-    }
+    validateClaimFile(file, config.r2.uploadMaxBytes);
 };
 
 const uploadFileToR2 = async ({ file, claimType = "promotions", slug }) => {
     validateFileForR2(file);
 
-    const key = buildObjectKey({
+    const key = buildClaimObjectKey({
         claimType,
         slug,
         originalName: file.originalname,
@@ -136,7 +62,7 @@ const uploadFileToR2 = async ({ file, claimType = "promotions", slug }) => {
         Key: key,
         Body: file.buffer,
         ContentType: file.mimetype,
-    }));
+    }), { abortSignal: AbortSignal.timeout(20000) });
 
     return {
         key,
@@ -146,7 +72,7 @@ const uploadFileToR2 = async ({ file, claimType = "promotions", slug }) => {
         content_type: file.mimetype,
         size: file.size,
         claim_type: normalizeClaimType(claimType),
-        slug: normalizeSlugPathSegment(slug),
+        slug: normalizePathSegment(slug),
     };
 };
 

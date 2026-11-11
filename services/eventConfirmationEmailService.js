@@ -1,37 +1,14 @@
-const nodemailer = require("nodemailer");
+const { getTransporter, isEmailConfigured } = require("./mailService");
+const { normalizeText } = require("../utils/text");
+const { requestJson } = require("../utils/httpJson");
+const { ExpiringCache } = require("../utils/expiringCache");
 const { Op } = require("sequelize");
 const config = require("../config/envConfig");
-const { models } = require("../models");
+const { models, sequelize } = require("../models");
 const { writeLog } = require("./logService");
 
-let transporter;
-
-const normalizeText = (value) => String(value || "").trim();
-
-const isEmailConfigured = () => Boolean(
-    config.email.host &&
-    config.email.port &&
-    config.email.user &&
-    config.email.pass &&
-    config.email.from
-);
-
-const getTransporter = () => {
-    if (!transporter) {
-        transporter = nodemailer.createTransport({
-            host: config.email.host,
-            port: config.email.port,
-            secure: false,
-            requireTLS: true,
-            auth: {
-                user: config.email.user,
-                pass: config.email.pass,
-            },
-        });
-    }
-
-    return transporter;
-};
+const templateCache = new ExpiringCache({ maxEntries: 100 });
+const pendingTemplates = new Map();
 
 const buildEventTemplateUrl = (slugUrl) => {
     const baseUrl = String(config.r2.publicBaseUrl || "").replace(/\/+$/, "");
@@ -51,7 +28,7 @@ const replaceTemplateVariables = (value, variables) => {
             `{{${key}}}`,
             `{{ ${key} }}`,
         ].forEach((placeholder) => {
-            output = output.replace(new RegExp(escapeRegExp(placeholder), "g"), safeReplacement);
+            output = output.replace(new RegExp(escapeRegExp(placeholder), "g"), () => safeReplacement);
         });
     });
 
@@ -119,67 +96,48 @@ const fetchEventEmailTemplate = async (slugUrl) => {
     }
 
     const templateUrl = buildEventTemplateUrl(slugUrl);
-    let response;
-
-    try {
-        response = await fetch(templateUrl);
-    } catch (error) {
-        error.templateUrl = templateUrl;
-        throw error;
+    const cached = templateCache.get(templateUrl);
+    if (cached) return cached;
+    if (!pendingTemplates.has(templateUrl)) {
+        pendingTemplates.set(templateUrl, requestJson({
+            url: templateUrl, label: "Event email template", maxResponseBytes: 256 * 1024,
+        }).then((template) => {
+            getEventTemplateSubject(template);
+            getEventTemplateBody(template);
+            return templateCache.set(templateUrl, template, 60000);
+        }).catch((error) => {
+            error.templateUrl = templateUrl;
+            throw error;
+        }).finally(() => pendingTemplates.delete(templateUrl)));
     }
-
-    const responseText = await response.text();
-
-    if (!response.ok) {
-        const error = new Error(`Failed to fetch event email template: HTTP ${response.status}`);
-        error.status = response.status;
-        error.templateUrl = templateUrl;
-        error.responsePreview = responseText.slice(0, 300);
-        throw error;
-    }
-
-    try {
-        return JSON.parse(responseText);
-    } catch (error) {
-        error.message = `Failed to parse event email template JSON: ${error.message}`;
-        error.templateUrl = templateUrl;
-        error.responsePreview = responseText.slice(0, 300);
-        throw error;
-    }
+    return pendingTemplates.get(templateUrl);
 };
 
 const getOrAssignTdScratchCode = async ({ eventClaimId, slugUrl }) => {
-    const { TD_Scratch_Codes } = models.active;
+    const { TD_Scratch_Codes, Event_Claims } = models.active;
 
     if (!eventClaimId || !TD_Scratch_Codes) return "";
     if (slugUrl !== "2degrees-bonus") return "";
 
-    const existingCode = await TD_Scratch_Codes.findOne({
-        where: { event_claim_id: eventClaimId },
-    });
+    return sequelize.transaction(async (transaction) => {
+        const claim = await Event_Claims.findByPk(eventClaimId, { transaction, lock: true });
+        if (!claim) throw new Error("Event claim not found for scratch code assignment.");
+        const existingCode = await TD_Scratch_Codes.findOne({
+            where: { event_claim_id: eventClaimId }, transaction,
+        });
+        if (existingCode) return existingCode.td_code;
 
-    if (existingCode) return existingCode.td_code;
-
-    const availableCode = await TD_Scratch_Codes.findOne({
-        where: {
-            used: 0,
-            event_claim_id: {
-                [Op.is]: null,
+        const availableCode = await TD_Scratch_Codes.findOne({
+            where: {
+                used: 0,
+                event_claim_id: { [Op.is]: null },
             },
-        },
-        order: [["id", "ASC"]],
+            order: [["id", "ASC"]], transaction, lock: true,
+        });
+        if (!availableCode) throw new Error("No available TD scratch code.");
+        await availableCode.update({ event_claim_id: eventClaimId, used: 1 }, { transaction });
+        return availableCode.td_code;
     });
-
-    if (!availableCode) {
-        throw new Error("No available TD scratch code.");
-    }
-
-    await availableCode.update({
-        event_claim_id: eventClaimId,
-        used: 1,
-    });
-
-    return availableCode.td_code;
 };
 
 const buildEventEmailVariables = async ({
@@ -279,12 +237,12 @@ const queueEventConfirmationEmail = ({
             fullName,
             eventClaimId,
         }).catch((error) => {
-            logEventEmailFailure({
+            return logEventEmailFailure({
                 slugUrl,
                 recipientEmail,
                 error,
             });
-        });
+        }).catch((error) => console.error("Failed to log event email failure:", error.message));
     });
 };
 

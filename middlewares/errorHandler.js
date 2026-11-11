@@ -17,6 +17,7 @@ const notFoundHandler = (req, res) => {
 };
 
 const errorHandler = (error, req, res, next) => {
+    if (res.headersSent) return next(error);
     const status = error.status || error.statusCode || 500;
     const location = getErrorLocation(error);
     const requestLogContext = getRequestLogContext(req);

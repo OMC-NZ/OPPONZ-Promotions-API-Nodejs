@@ -1,4 +1,4 @@
-const https = require("https");
+const { requestJson } = require("../utils/httpJson");
 const config = require("../config/envConfig");
 
 const SITEVERIFY_HOSTNAME = "www.google.com";
@@ -10,47 +10,15 @@ const postSiteVerify = (token) => {
         response: token,
     }).toString();
 
-    const options = {
-        hostname: SITEVERIFY_HOSTNAME,
-        path: SITEVERIFY_PATH,
+    return requestJson({
+        url: `https://${SITEVERIFY_HOSTNAME}${SITEVERIFY_PATH}`,
         method: "POST",
         headers: {
             "Content-Type": "application/x-www-form-urlencoded",
-            "Content-Length": Buffer.byteLength(body),
         },
-        timeout: 10000,
-    };
-
-    return new Promise((resolve, reject) => {
-        const request = https.request(options, (response) => {
-            let responseBody = "";
-
-            response.setEncoding("utf8");
-            response.on("data", (chunk) => {
-                responseBody += chunk;
-            });
-            response.on("end", () => {
-                if (response.statusCode < 200 || response.statusCode >= 300) {
-                    const error = new Error(`Google siteverify returned HTTP ${response.statusCode}`);
-                    error.statusCode = response.statusCode;
-                    reject(error);
-                    return;
-                }
-
-                try {
-                    resolve(JSON.parse(responseBody));
-                } catch (error) {
-                    reject(new Error("Invalid JSON returned by Google siteverify."));
-                }
-            });
-        });
-
-        request.on("timeout", () => {
-            request.destroy(new Error("Google siteverify request timed out."));
-        });
-        request.on("error", reject);
-        request.write(body);
-        request.end();
+        body,
+        label: "Google siteverify",
+        maxResponseBytes: 64 * 1024,
     });
 };
 
@@ -74,7 +42,7 @@ const verifyRecaptchaToken = async ({ token, expectedAction }) => {
 
     const result = await postSiteVerify(token);
     const googleSuccess = result.success === true;
-    const scorePresent = typeof result.score === "number";
+    const scorePresent = Number.isFinite(result.score) && result.score >= 0 && result.score <= 1;
     const score = scorePresent ? result.score : 0;
     const scoreAccepted = scorePresent && score >= config.recaptcha.minScore;
     const actionMatches = !expectedAction || result.action === expectedAction;

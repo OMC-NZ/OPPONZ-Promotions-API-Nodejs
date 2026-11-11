@@ -1,16 +1,11 @@
 const moment = require("moment-timezone");
 const { isStrictProductionSecurity } = require("../config/securityFeatureConfig");
+const { toScalarText } = require("./text");
+const { allowedExtensions } = require("./claimFilePolicy");
 
 const MAORI_LETTERS = "A-Za-z\\u0100\\u0112\\u012A\\u014C\\u016A\\u0101\\u0113\\u012B\\u014D\\u016B";
 const NAME_PATTERN = new RegExp(`^[${MAORI_LETTERS}]+(?: [${MAORI_LETTERS}]+)*$`);
-const DEFAULT_ALLOWED_FILE_EXTENSIONS = [
-    ".jpg",
-    ".jpeg",
-    ".png",
-    ".gif",
-    ".webp",
-    ".pdf",
-];
+const DEFAULT_ALLOWED_FILE_EXTENSIONS = [...allowedExtensions];
 
 const createValidator = (name, validate, options = {}) => ({
     name,
@@ -19,16 +14,6 @@ const createValidator = (name, validate, options = {}) => ({
 });
 
 const isEmptyValue = (value) => value === undefined || value === null || value === "";
-
-const toScalarText = (value) => {
-    const valueType = typeof value;
-
-    if (valueType === "string" || valueType === "number" || valueType === "boolean" || valueType === "bigint") {
-        return String(value);
-    }
-
-    return null;
-};
 
 const invalidFormat = (message = "Invalid format.") => ({ valid: false, message });
 
@@ -41,6 +26,27 @@ const required = (message = "This field is required.") => createValidator("requi
 });
 
 const optional = () => createValidator("optional", () => ({ valid: true }), { optional: true });
+
+const jsonObject = () => createValidator("jsonObject", (value) => {
+    if (isEmptyValue(value)) return { valid: true };
+    if (typeof value !== "string") return invalidFormat("Must be a JSON object string.");
+    try {
+        const parsed = JSON.parse(value);
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return invalidFormat("Must be a JSON object string.");
+        const pending = [{ value: parsed, depth: 0 }];
+        while (pending.length) {
+            const item = pending.pop();
+            if (item.depth > 12) return invalidFormat("JSON nesting is too deep.");
+            for (const [key, child] of Object.entries(item.value)) {
+                if (["__proto__", "prototype", "constructor"].includes(key)) return invalidFormat("Invalid JSON field.");
+                if (child && typeof child === "object") pending.push({ value: child, depth: item.depth + 1 });
+            }
+        }
+        return { valid: true };
+    } catch (error) {
+        return invalidFormat("Must be a JSON object string.");
+    }
+});
 
 const giftAliases = () => createValidator("giftAliases", (value) => {
     let aliases = value;
@@ -131,7 +137,7 @@ const invoiceNumber = (
     const scalarText = toScalarText(value);
     if (scalarText === null) return invalidFormat(message);
 
-    const text = scalarText.trim();
+    const text = scalarText;
     const valid = /[0-9]/.test(text) && /^[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*$/.test(text);
 
     return valid
@@ -249,7 +255,7 @@ const integer = (message = "Must be an integer.") => createValidator("integer", 
     if (scalarText === null) return invalidFormat(message);
 
     const text = scalarText.trim();
-    const valid = /^-?\d+$/.test(text);
+    const valid = /^-?\d+$/.test(text) && Number.isSafeInteger(Number(text));
 
     return valid
         ? { valid: true, value: Number.parseInt(text, 10) }
@@ -333,6 +339,7 @@ const recaptchaToken = () => {
 module.exports = {
     required,
     optional,
+    jsonObject,
     giftAliases,
     email,
     imei,

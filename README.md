@@ -2,6 +2,8 @@
 
 Node.js/Express API for OPPO NZ promotions, claims, events, devices, gifts, and related promotion workflows.
 
+Requires Node.js 20 or newer. Install the locked dependencies with `npm ci` (or `npm ci --omit=dev` on the production server).
+
 ## Scripts
 
 ```bash
@@ -23,6 +25,26 @@ Environment files are intentionally ignored by Git. When `.env`, `.env.developme
 - `.env.test.prod` contains local production-environment test settings used by `npm run dev:prod-env`.
 - `.env.production` contains production settings.
 
+## Database Routing
+
+The following endpoints always read the database configured by `DB_*`, including when running `npm run dev`:
+
+- `GET /api/promotions/current`
+- `GET /api/events/current`
+- `POST /api/promotions/verify-imei-purchase`
+
+All device, model eligibility, promotion, gift and channel queries inside promotion IMEI verification use that same DB connection. In development, a separate DB connection pool is initialized only when one of these endpoints is called; in production, the existing DB pool is reused.
+
+`POST /api/claims` also reads promotion configuration from DB: `Promotions`, `Promotion_Devices`, `Promotion_Channels`, `Promotion_Gifts`, and the gift catalog used to validate promotion links. In development, device availability and destination gift IDs are read from DDB. Customers, claims, delivery addresses, claim-gift links, and device updates remain in one DDB transaction; confirmation email status also stays in DDB. Production and `dev:prod-env` continue to read and write DB as before. Gift aliases are matched between catalogs; DB gift IDs are never inserted into DDB claim-gift links.
+
+DDB must still contain the referenced promotion ID and gift records for local test submissions. Its foreign keys remain enabled: reading an activity from DB does not create the corresponding parent row in DDB or bypass referential integrity. The API does not automatically copy production records into DDB.
+
+Other endpoints keep their existing routing: development uses `DDB_*`, while production and `dev:prod-env` use `DB_*`. This includes event IMEI/channel verification, event forms, and claim tracking.
+
+When running `npm run dev`, these DB-bound reads use only the `DB_*` database settings from `.env.production`, parsed in isolation. Development ports, reCAPTCHA switches, CORS, upload providers, and `DDB_*` settings continue to come from the normal development environment. No production settings are copied into `process.env` or written to an environment file. Keep `.env.production` available locally with the intended DB credentials.
+
+Production startup continues to use `.env.production` normally. `dev:prod-env` continues to use the `DB_*` settings in `.env.test.prod`. These endpoints do not fall back to `DDB_*` if DB settings or the DB connection are unavailable.
+
 ## Claim Gifts
 
 `POST /api/claims` requires `gift_alias` to be a non-empty array of unique gift aliases:
@@ -42,6 +64,12 @@ Each alias must be a string of up to 45 characters and match a gift linked to th
 ## Security
 
 This API includes security middleware and operational safeguards for rate limiting, trusted proxy IP handling, CORS, Helmet security headers, API key protection, reCAPTCHA verification, request/error/security logs, production error email alerts, unified error responses, response field allowlists, sensitive log redaction, route/method security logging, and reusable request validation.
+
+## Verification And Maintenance
+
+Run `npm test` for the automated regression suite. Tests use isolated database/storage/SMTP substitutes and a temporary loopback HTTP server for real multipart uploads; they do not submit claims to a configured database or send customer emails.
+
+See [docs/performance-review.md](docs/performance-review.md) for the performance/security review, shared helpers, deployment checks, and remaining infrastructure work.
 
 ## Rate Limiting
 

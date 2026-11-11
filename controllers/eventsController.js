@@ -1,6 +1,12 @@
-const crypto = require("crypto");
+const { normalizeText, joinText } = require("../utils/text");
+const { generateUniqueClaimId } = require("../utils/claimId");
+const { rollbackTransaction } = require("../utils/dbTransaction");
+const { ExpiringCache } = require("../utils/expiringCache");
+const { getEventDeviceVerification } = require("../services/eventEligibilityService");
+const { buildAssetUrl } = require("../utils/assetUrl");
+const config = require("../config/envConfig");
 const { Op, literal } = require("sequelize");
-const { sequelize, models } = require("../models");
+const { sequelize, models, getDBModelContext } = require("../models");
 const { uploadClaimFile, validateClaimFile } = require("../services/claimFileUploadService");
 const { writeLog } = require("../services/logService");
 const { queueEventConfirmationEmail } = require("../services/eventConfirmationEmailService");
@@ -9,51 +15,18 @@ const { sendSuccess, sendError } = require("../utils/apiResponse");
 
 const EVENT_CLAIM_STATUS_PENDING = 0;
 const EVENT_CLAIM_ID_PREFIX = "OPNZEVTCLM";
-const EVENT_CLAIM_ID_RANDOM_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 const EVENT_CLAIM_FAILURE_MESSAGE = "Submission failed. Please check your details and try again.";
 const EVENT_CLAIM_SYSTEM_FAILURE_MESSAGE = "Submission failed. Please try again later.";
 const EVENT_CLAIM_LOG_COOLDOWN_MS = 60 * 1000;
-const eventClaimRollbackLogCache = new Map();
+const eventClaimRollbackLogCache = new ExpiringCache();
 const EXCLUDED_EVENT_EXTRA_DATA_KEYS = new Set([
     "terms_accepted",
     "event_id",
     "slug",
 ]);
 
-const normalizeText = (value) => String(value || "").trim();
-
 const formatFullName = (firstName, lastName) => {
-    return [firstName, lastName]
-        .map(normalizeText)
-        .filter(Boolean)
-        .join(" ");
-};
-
-const getEventClaimIdDatePart = (newZealandDateTime) => {
-    return `${newZealandDateTime.slice(2, 4)}${newZealandDateTime.slice(5, 7)}${newZealandDateTime.slice(8, 10)}`;
-};
-
-const generateEventClaimIdRandomPart = () => {
-    const randomBytes = crypto.randomBytes(8);
-
-    return [...randomBytes]
-        .map((byte) => EVENT_CLAIM_ID_RANDOM_ALPHABET[byte % EVENT_CLAIM_ID_RANDOM_ALPHABET.length])
-        .join("");
-};
-
-const generateEventClaimId = (newZealandDateTime) => {
-    return `${EVENT_CLAIM_ID_PREFIX}-${getEventClaimIdDatePart(newZealandDateTime)}-${generateEventClaimIdRandomPart()}`;
-};
-
-const generateUniqueEventClaimId = async (Event_Claims, newZealandDateTime, transaction) => {
-    for (let attempt = 0; attempt < 5; attempt += 1) {
-        const claimId = generateEventClaimId(newZealandDateTime);
-        const existingClaim = await Event_Claims.findByPk(claimId, { transaction });
-
-        if (!existingClaim) return claimId;
-    }
-
-    throw new Error("Failed to generate a unique event claim ID.");
+    return joinText([firstName, lastName]);
 };
 
 const getEventFileFieldNames = (uploadKey) => {
@@ -74,7 +47,7 @@ const shouldLogEventClaimRollback = (key) => {
         return false;
     }
 
-    eventClaimRollbackLogCache.set(key, now);
+    eventClaimRollbackLogCache.set(key, now, EVENT_CLAIM_LOG_COOLDOWN_MS);
     return true;
 };
 
@@ -124,8 +97,8 @@ const getEventFieldValue = (body, extraData, fieldKey) => {
     return extraData[fieldKey];
 };
 
-const getActiveDateRangeConditions = (dateTime) => {
-    const dateTimeLiteral = sequelize.escape(dateTime);
+const getActiveDateRangeConditions = (dateTime, connection = sequelize) => {
+    const dateTimeLiteral = connection.escape(dateTime);
 
     return [
         literal(`start_date <= ${dateTimeLiteral}`),
@@ -135,8 +108,9 @@ const getActiveDateRangeConditions = (dateTime) => {
 
 const getCurrentEvents = async (req, res, next) => {
     try {
+        const { sequelize: dbConnection, models: dbModels } = getDBModelContext();
         const currentTime = getNewZealandTime();
-        const { Events } = models.active;
+        const { Events } = dbModels;
 
         const events = await Events.findAll({
             attributes: [
@@ -145,7 +119,7 @@ const getCurrentEvents = async (req, res, next) => {
                 "slug_url",
             ],
             where: {
-                [Op.and]: getActiveDateRangeConditions(currentTime),
+                [Op.and]: getActiveDateRangeConditions(currentTime, dbConnection),
             },
             order: [["id", "DESC"]],
             raw: true,
@@ -153,9 +127,7 @@ const getCurrentEvents = async (req, res, next) => {
 
         const eventsWithBannerUrls = events.map((event) => ({
             ...event,
-            banner_url: process.env.R2_PUBLIC_ASSETS_URL
-                + "/banners/Events/imgs/"
-                + event.banner_url,
+            banner_url: buildAssetUrl(config.r2.publicBaseUrl, "banners/Events/imgs", event.banner_url),
         }));
 
         return sendSuccess(req, res, {
@@ -166,10 +138,6 @@ const getCurrentEvents = async (req, res, next) => {
         error.publicMessage = "Failed to fetch current events.";
         return next(error);
     }
-};
-
-const buildEventAssetUrl = (baseUrl, path, fileName) => {
-    return `${String(baseUrl || "").replace(/\/+$/, "")}${path}${fileName}`;
 };
 
 const parseValidationJson = (value) => {
@@ -313,13 +281,13 @@ const getEventForm = async (req, res, next) => {
                 event: {
                     id: event.id,
                     name: event.name,
-                    terms_url: buildEventAssetUrl(
-                        process.env.R2_PUBLIC_ASSETS_URL,
+                    terms_url: buildAssetUrl(
+                        config.r2.publicBaseUrl,
                         "/banners/Events/terms/",
                         event.terms_url
                     ),
-                    banner_url: buildEventAssetUrl(
-                        process.env.R2_PUBLIC_ASSETS_URL,
+                    banner_url: buildAssetUrl(
+                        config.r2.publicBaseUrl,
                         "/banners/Events/imgs/",
                         event.banner_url
                     ),
@@ -348,99 +316,8 @@ const getEventForm = async (req, res, next) => {
     }
 };
 
-const getEventDeviceVerification = async ({ event, imei, transaction }) => {
-    const {
-        Devices,
-        Event_Channels,
-        Event_Models,
-        Event_Claims,
-    } = models.active;
-
-    const [device, existingEventClaim] = await Promise.all([
-        Devices.findOne({
-            attributes: ["imei", "channel_code", "model"],
-            where: { imei },
-            transaction,
-            raw: true,
-        }),
-        Event_Claims.findOne({
-            attributes: ["id"],
-            where: { imei },
-            transaction,
-            raw: true,
-        }),
-    ]);
-
-    if (!device || existingEventClaim) {
-        return {
-            verified: false,
-            device,
-        };
-    }
-
-    if (Number(event.requires_channel) !== 1) {
-        return {
-            verified: true,
-            device,
-        };
-    }
-
-    if (!device.channel_code || !device.model) {
-        return {
-            verified: false,
-            device,
-        };
-    }
-
-    const [
-        hasChannelRestriction,
-        matchingEventChannel,
-        hasModelRestriction,
-        matchingEventModel,
-    ] = await Promise.all([
-        Event_Channels.findOne({
-            attributes: ["id"],
-            where: { event_id: event.id },
-            transaction,
-            raw: true,
-        }),
-        Event_Channels.findOne({
-            attributes: ["id"],
-            where: {
-                event_id: event.id,
-                channel_code: device.channel_code,
-            },
-            transaction,
-            raw: true,
-        }),
-        Event_Models.findOne({
-            attributes: ["id"],
-            where: { event_id: event.id },
-            transaction,
-            raw: true,
-        }),
-        Event_Models.findOne({
-            attributes: ["id"],
-            where: {
-                event_id: event.id,
-                eligible_model: device.model,
-            },
-            transaction,
-            raw: true,
-        }),
-    ]);
-
-    const channelVerified = !hasChannelRestriction || Boolean(matchingEventChannel);
-    const modelVerified = !hasModelRestriction || Boolean(matchingEventModel);
-
-    return {
-        verified: channelVerified && modelVerified,
-        device,
-    };
-};
-
 const submitEventClaim = async (req, res, next) => {
-    const transaction = await sequelize.transaction();
+    let transaction;
 
     try {
         const currentTime = getNewZealandTime();
@@ -466,6 +343,7 @@ const submitEventClaim = async (req, res, next) => {
             Event_Form_Sections,
             Event_Form_Custom_Fields,
             Event_Form_Uploads,
+            Deliver_Addresses,
         } = models.active;
 
         const event = await Events.findOne({
@@ -481,7 +359,7 @@ const submitEventClaim = async (req, res, next) => {
             logEventClaimRollback("EVENT_NOT_FOUND", req, {
                 slug,
             });
-            await transaction.rollback();
+            await rollbackTransaction(transaction);
             return sendError(req, res, {
                 statusCode: 404,
                 message: EVENT_CLAIM_FAILURE_MESSAGE,
@@ -521,7 +399,7 @@ const submitEventClaim = async (req, res, next) => {
                 eventId: event.id,
                 missingFields: missingRequiredFields.map(([field]) => field),
             });
-            await transaction.rollback();
+            await rollbackTransaction(transaction);
             return sendError(req, res, {
                 statusCode: 400,
                 message: EVENT_CLAIM_FAILURE_MESSAGE,
@@ -545,7 +423,7 @@ const submitEventClaim = async (req, res, next) => {
                     eventId: event.id,
                     hasDevice: Boolean(verification.device),
                 });
-                await transaction.rollback();
+                await rollbackTransaction(transaction);
                 return sendError(req, res, {
                     statusCode: 400,
                     message: EVENT_CLAIM_FAILURE_MESSAGE,
@@ -592,7 +470,7 @@ const submitEventClaim = async (req, res, next) => {
                 eventId: event.id,
                 missingFields: requiredCustomFields.map((field) => field.field_key),
             });
-            await transaction.rollback();
+            await rollbackTransaction(transaction);
             return sendError(req, res, {
                 statusCode: 400,
                 message: EVENT_CLAIM_FAILURE_MESSAGE,
@@ -623,7 +501,7 @@ const submitEventClaim = async (req, res, next) => {
                 receivedFields: unknownFiles.map((file) => file.fieldname),
                 allowedFields: [...allowedFileFieldNames],
             });
-            await transaction.rollback();
+            await rollbackTransaction(transaction);
             return sendError(req, res, {
                 statusCode: 400,
                 message: EVENT_CLAIM_FAILURE_MESSAGE,
@@ -644,7 +522,7 @@ const submitEventClaim = async (req, res, next) => {
                     missingUploadKey: upload.upload_key,
                     receivedFields: files.map((file) => file.fieldname),
                 });
-                await transaction.rollback();
+                await rollbackTransaction(transaction);
                 return sendError(req, res, {
                     statusCode: 400,
                     message: EVENT_CLAIM_FAILURE_MESSAGE,
@@ -664,7 +542,7 @@ const submitEventClaim = async (req, res, next) => {
                 eventId: event.id,
                 message: error.message,
             });
-            await transaction.rollback();
+            await rollbackTransaction(transaction);
             return sendError(req, res, {
                 statusCode: error.statusCode || 400,
                 message: EVENT_CLAIM_FAILURE_MESSAGE,
@@ -712,6 +590,20 @@ const submitEventClaim = async (req, res, next) => {
             delete customData[key];
         });
 
+        transaction = await sequelize.transaction();
+        if (Number(event.requires_imei) === 1 || Number(event.requires_channel) === 1) {
+            const verification = await getEventDeviceVerification({ event, imei, transaction, lockDevice: true });
+            if (!verification.verified) {
+                await rollbackTransaction(transaction);
+                return sendError(req, res, {
+                    statusCode: 400, message: EVENT_CLAIM_FAILURE_MESSAGE,
+                    code: "EVENT_CLAIM_DEVICE_NOT_ELIGIBLE",
+                    debug: { reason: "DEVICE_CHANGED_OR_CLAIM_ALREADY_EXISTS" },
+                    includeRequestId: false, includeCode: false, includeDebug: false,
+                });
+            }
+        }
+
         const customer = await Customers.create({
             first_name: firstName,
             last_name: lastName,
@@ -719,7 +611,9 @@ const submitEventClaim = async (req, res, next) => {
             contact,
             updated_at: currentTime,
         }, { transaction });
-        const eventClaimId = await generateUniqueEventClaimId(Event_Claims, currentTime, transaction);
+        const eventClaimId = await generateUniqueClaimId({
+            model: Event_Claims, prefix: EVENT_CLAIM_ID_PREFIX, dateTime: currentTime, transaction,
+        });
         const eventClaimImei = Number(event.requires_imei) === 1 || Number(event.requires_channel) === 1
             ? imei
             : null;
@@ -741,6 +635,14 @@ const submitEventClaim = async (req, res, next) => {
             updated_at: currentTime,
         }, { transaction });
 
+        if (Number(event.requires_delivery) === 1) {
+            await Deliver_Addresses.create({
+                claim_id: null, event_claim_id: eventClaimId,
+                street, suburb, city, postcode, instructions: instructions || null,
+                is_current: 1, updated_at: currentTime,
+            }, { transaction });
+        }
+
         await transaction.commit();
         queueEventConfirmationEmail({
             slugUrl: event.slug_url,
@@ -761,7 +663,7 @@ const submitEventClaim = async (req, res, next) => {
             name: error.name,
             code: error.code,
         });
-        await transaction.rollback();
+        await rollbackTransaction(transaction);
         error.status = 500;
         error.publicMessage = EVENT_CLAIM_SYSTEM_FAILURE_MESSAGE;
         error.includeRequestId = false;

@@ -1,17 +1,18 @@
 const { Op, fn, col, literal } = require("sequelize");
-const { sequelize, models } = require("../models");
+const { getDBModelContext } = require("../models");
 const { getNewZealandTime } = require("../utils/nzTimeZone");
 const { sendSuccess } = require("../utils/apiResponse");
 const apiFields = require("../config/apiFields");
+const config = require("../config/envConfig");
+const { buildAssetUrl } = require("../utils/assetUrl");
+const channelNameCollator = new Intl.Collator("en-NZ", { sensitivity: "base" });
 
 const sortChannelNames = (left, right) => {
     const leftFirstWord = left.trim().split(/\s+/)[0];
     const rightFirstWord = right.trim().split(/\s+/)[0];
-    const firstWordComparison = leftFirstWord.localeCompare(rightFirstWord, "en-NZ", {
-        sensitivity: "base",
-    });
+    const firstWordComparison = channelNameCollator.compare(leftFirstWord, rightFirstWord);
 
-    return firstWordComparison || left.localeCompare(right, "en-NZ", { sensitivity: "base" });
+    return firstWordComparison || channelNameCollator.compare(left, right);
 };
 
 const groupChannelsByDate = (availabilityMap, channelMap) => {
@@ -50,13 +51,14 @@ const groupChannelsByDate = (availabilityMap, channelMap) => {
 
 const getCurrentPromotions = async (req, res, next) => {
     try {
+        const { sequelize, models: dbModels } = getDBModelContext();
         const currentTime = getNewZealandTime();
         const currentTimeLiteral = sequelize.escape(currentTime);
         const {
             Promotions,
             Channels,
             Promotion_Channels,
-        } = models.active;
+        } = dbModels;
 
         const activePromotionChannels = await Promotion_Channels.findAll({
             attributes: [
@@ -134,7 +136,7 @@ const getCurrentPromotions = async (req, res, next) => {
                 gifts: promotion.description,
                 url: promotion.slug_url,
                 termsURL: promotion.terms_url,
-                banner: process.env.R2_PUBLIC_ASSETS_URL + '/banners/Promotions/' + promotion.banner_url,
+                banner: buildAssetUrl(config.r2.publicBaseUrl, "banners/Promotions", promotion.banner_url),
                 channels: promotionChannelData,
             }];
         });
@@ -143,7 +145,6 @@ const getCurrentPromotions = async (req, res, next) => {
             data,
         });
     } catch (error) {
-        console.error("Error fetching current promotions:", error);
         error.status = 500;
         error.publicMessage = "Failed to fetch current promotions.";
         return next(error);

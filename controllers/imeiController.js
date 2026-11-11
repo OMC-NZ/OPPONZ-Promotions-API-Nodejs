@@ -1,6 +1,10 @@
-const { Op, fn, col, literal } = require("sequelize");
-const { sequelize, models } = require("../models");
-const { findEligiblePromotionIdsForDevice } = require("../services/promotionEligibilityService");
+const { Op, fn, col } = require("sequelize");
+const { models, getDBModelContext } = require("../models");
+const { findEligiblePromotionChannelsForDevice } = require("../services/promotionEligibilityService");
+const { getEventDeviceVerification } = require("../services/eventEligibilityService");
+const { normalizeText } = require("../utils/text");
+const { buildAssetUrl } = require("../utils/assetUrl");
+const config = require("../config/envConfig");
 const { getNewZealandTime, toNewZealandDateTime } = require("../utils/nzTimeZone");
 const { sendSuccess } = require("../utils/apiResponse");
 
@@ -18,93 +22,17 @@ const sendIneligibleResult = (req, res) => {
 const verifyImeiChannel = async (req, res, next) => {
     try {
         const { imei } = req.body;
-        const slugUrl = String(req.body.slug_url || "").trim();
-        const {
-            Devices,
-            Events,
-            Event_Channels,
-            Event_Models,
-            Event_Claims,
-        } = models.active;
-
-        const [event, device, existingEventClaim] = await Promise.all([
-            Events.findOne({
-                attributes: ["id"],
-                where: { slug_url: slugUrl },
-                raw: true,
-            }),
-            Devices.findOne({
-                attributes: ["channel_code", "model"],
-                where: { imei },
-                raw: true,
-            }),
-            Event_Claims.findOne({
-                attributes: ["id"],
-                where: { imei },
-                raw: true,
-            }),
-        ]);
-
-        if (!event || !device || existingEventClaim) {
-            return sendSuccess(req, res, {
-                data: {
-                    verified: false,
-                },
-            });
-        }
-
-        if (!device.channel_code || !device.model) {
-            return sendSuccess(req, res, {
-                data: {
-                    verified: false,
-                },
-            });
-        }
-
-        const [
-            hasChannelRestriction,
-            matchingEventChannel,
-            hasModelRestriction,
-            matchingEventModel,
-        ] = await Promise.all([
-            Event_Channels.findOne({
-                attributes: ["id"],
-                where: {
-                    event_id: event.id,
-                },
-                raw: true,
-            }),
-            Event_Channels.findOne({
-                attributes: ["id"],
-                where: {
-                    event_id: event.id,
-                    channel_code: device.channel_code,
-                },
-                raw: true,
-            }),
-            Event_Models.findOne({
-                attributes: ["id"],
-                where: {
-                    event_id: event.id,
-                },
-                raw: true,
-            }),
-            Event_Models.findOne({
-                attributes: ["id"],
-                where: {
-                    event_id: event.id,
-                    eligible_model: device.model,
-                },
-                raw: true,
-            }),
-        ]);
-
-        const channelVerified = !hasChannelRestriction || Boolean(matchingEventChannel);
-        const modelVerified = !hasModelRestriction || Boolean(matchingEventModel);
+        const slugUrl = normalizeText(req.body.slug_url);
+        const event = await models.active.Events.findOne({
+            attributes: ["id"], where: { slug_url: slugUrl }, raw: true,
+        });
+        const result = event
+            ? await getEventDeviceVerification({ event, imei, checkRestrictions: true })
+            : { verified: false };
 
         return sendSuccess(req, res, {
             data: {
-                verified: channelVerified && modelVerified,
+                verified: result.verified,
             },
         });
     } catch (error) {
@@ -116,19 +44,17 @@ const verifyImeiChannel = async (req, res, next) => {
 
 const verifyImei = async (req, res, next) => {
     try {
+        const dbContext = getDBModelContext();
         const { imei, purchase_date: purchaseDateInput } = req.body;
         const requestTime = getNewZealandTime();
         const purchaseDate = toNewZealandDateTime(purchaseDateInput);
-        const purchaseDateLiteral = sequelize.escape(purchaseDate);
-        const requestTimeLiteral = sequelize.escape(requestTime);
         const {
             Devices,
             Channels,
-            Promotion_Channels,
             Promotions,
             Promotion_Gifts,
             Gifts,
-        } = models.active;
+        } = dbContext.models;
 
         const device = await Devices.findOne({
             attributes: ["model", "channel_code", "redemption_status"],
@@ -144,37 +70,22 @@ const verifyImei = async (req, res, next) => {
             return sendIneligibleResult(req, res);
         }
 
-        const eligiblePromotionIds = await findEligiblePromotionIdsForDevice({
+        const promotionChannels = await findEligiblePromotionChannelsForDevice({
+            modelContext: dbContext,
             device,
             purchaseDate,
             requestTime,
-        });
-
-        if (eligiblePromotionIds.length === 0) {
-            return sendIneligibleResult(req, res);
-        }
-
-        const promotionChannels = await Promotion_Channels.findAll({
             attributes: [
                 "promotion_id",
                 "channel_code",
                 [fn("DATE_FORMAT", col("start_date"), "%d %b %Y"), "start_date"],
                 [fn("DATE_FORMAT", col("end_date"), "%d %b %Y"), "end_date"],
             ],
-            where: {
-                promotion_id: {
-                    [Op.in]: eligiblePromotionIds,
-                },
-                channel_code: device.channel_code,
-                [Op.and]: [
-                    literal(`start_date <= ${purchaseDateLiteral}`),
-                    literal(`end_date >= ${purchaseDateLiteral}`),
-                    literal(`start_date <= ${requestTimeLiteral}`),
-                    literal(`redeem_end_date >= ${requestTimeLiteral}`),
-                ],
-            },
-            raw: true,
         });
+        const eligiblePromotionIds = [...new Set(promotionChannels.map((item) => item.promotion_id))]
+            .sort((left, right) => Number(right) - Number(left));
+
+        if (eligiblePromotionIds.length === 0) return sendIneligibleResult(req, res);
 
         const channelCodes = [...new Set(promotionChannels.map((item) => item.channel_code))];
 
@@ -270,7 +181,7 @@ const verifyImei = async (req, res, next) => {
                 title: promotion.name,
                 channel: getPromotionChannelData(promotionId),
                 description: promotion.description,
-                banner_url: process.env.R2_PUBLIC_ASSETS_URL + '/banners/Promotions/' + promotion.banner_url,
+                banner_url: buildAssetUrl(config.r2.publicBaseUrl, "banners/Promotions", promotion.banner_url),
                 slug_url: promotion.slug_url,
                 termsURL: promotion.terms_url,
                 gifts: promotionGiftData,

@@ -1,15 +1,16 @@
-const crypto = require("crypto");
 const path = require("path");
 const config = require("../config/envConfig");
 const { validateFileForR2 } = require("./r2UploadService");
-
-const claimUploadFolders = {
-    promotions: "claims/promotions",
-    events: "claims/events",
-};
+const { buildClaimObjectKey, normalizeClaimType, normalizePathSegment } = require("../utils/claimFilePolicy");
+const { requestJson } = require("../utils/httpJson");
+const { ExpiringCache } = require("../utils/expiringCache");
 
 let cachedAccessToken;
 let cachedAccessTokenExpiresAt = 0;
+let pendingTokenRequest;
+let refreshToken = config.oneDrive.refreshToken;
+const folderCache = new ExpiringCache({ maxEntries: 256 });
+const pendingFolders = new Map();
 
 const assertOneDriveConfig = () => {
     const missing = [];
@@ -26,27 +27,6 @@ const assertOneDriveConfig = () => {
     }
 };
 
-const normalizeClaimType = (claimType) => {
-    const key = String(claimType || "").trim().toLowerCase();
-    return claimUploadFolders[key] ? key : "promotions";
-};
-
-const normalizePathSegment = (value, label) => {
-    const text = String(value || "").trim().replace(/^\/+|\/+$/g, "");
-
-    if (!text || text.includes("..") || /[\\/]/.test(text)) {
-        const error = new Error(`OneDrive ${label} is required.`);
-        error.statusCode = 500;
-        throw error;
-    }
-
-    return text;
-};
-
-const getSafeExtension = (originalName) => {
-    return path.extname(String(originalName || "")).toLowerCase();
-};
-
 const joinOneDrivePath = (...parts) => {
     return parts
         .map((part) => String(part || "").trim().replace(/^\/+|\/+$/g, ""))
@@ -55,12 +35,7 @@ const joinOneDrivePath = (...parts) => {
 };
 
 const buildOneDriveObjectPath = ({ claimType, slug, originalName }) => {
-    const folder = claimUploadFolders[normalizeClaimType(claimType)];
-    const slugSegment = normalizePathSegment(slug, "slug");
-    const extension = getSafeExtension(originalName);
-    const fileName = `${crypto.randomUUID()}${extension}`;
-
-    return joinOneDrivePath(config.oneDrive.uploadRoot, folder, slugSegment, fileName);
+    return joinOneDrivePath(config.oneDrive.uploadRoot, buildClaimObjectKey({ claimType, slug, originalName }));
 };
 
 const getFolderPath = (objectPath) => {
@@ -80,7 +55,7 @@ const getCachedAccessToken = () => {
     return null;
 };
 
-const getOneDriveAccessToken = async () => {
+const requestOneDriveAccessToken = async () => {
     assertOneDriveConfig();
 
     const cachedToken = getCachedAccessToken();
@@ -91,34 +66,19 @@ const getOneDriveAccessToken = async () => {
         client_secret: config.oneDrive.clientSecret,
         redirect_uri: config.oneDrive.redirectUri,
         grant_type: "refresh_token",
-        refresh_token: config.oneDrive.refreshToken,
+        refresh_token: refreshToken,
     });
 
-    const response = await fetch(config.oneDrive.tokenUrl, {
+    const tokenData = await requestJson({
+        url: config.oneDrive.tokenUrl,
         method: "POST",
         headers: {
             "Content-Type": "application/x-www-form-urlencoded",
         },
         body,
+        label: "OneDrive token endpoint",
+        maxResponseBytes: 64 * 1024,
     });
-    const responseText = await response.text();
-
-    if (!response.ok) {
-        const error = new Error(`OneDrive token endpoint returned HTTP ${response.status}`);
-        error.statusCode = 502;
-        error.responsePreview = responseText.slice(0, 300);
-        throw error;
-    }
-
-    let tokenData;
-
-    try {
-        tokenData = JSON.parse(responseText);
-    } catch (error) {
-        error.message = `Failed to parse OneDrive token response JSON: ${error.message}`;
-        error.statusCode = 502;
-        throw error;
-    }
 
     if (!tokenData.access_token) {
         const error = new Error("OneDrive token response does not include access_token.");
@@ -128,72 +88,68 @@ const getOneDriveAccessToken = async () => {
 
     cachedAccessToken = tokenData.access_token;
     cachedAccessTokenExpiresAt = Date.now() + Number(tokenData.expires_in || 3600) * 1000;
+    if (typeof tokenData.refresh_token === "string") refreshToken = tokenData.refresh_token;
 
     return cachedAccessToken;
 };
 
+const getOneDriveAccessToken = async ({ rejectedToken } = {}) => {
+    const cached = getCachedAccessToken();
+    if (cached && cached !== rejectedToken) return cached;
+    if (rejectedToken === cachedAccessToken) cachedAccessToken = undefined;
+    if (!pendingTokenRequest) {
+        pendingTokenRequest = requestOneDriveAccessToken().finally(() => { pendingTokenRequest = undefined; });
+    }
+    return pendingTokenRequest;
+};
+
+const encodeDrivePath = (value) => value.split("/").map(encodeURIComponent).join("/");
+
 const getOneDriveItemByPath = async ({ accessToken, itemPath }) => {
     const cleanPath = String(itemPath || "").trim().replace(/^\/+|\/+$/g, "");
     const url = cleanPath
-        ? `https://graph.microsoft.com/v1.0/me/drive/root:/${encodeURI(cleanPath)}`
+        ? `https://graph.microsoft.com/v1.0/me/drive/root:/${encodeDrivePath(cleanPath)}`
         : "https://graph.microsoft.com/v1.0/me/drive/root";
-    const response = await fetch(url, {
-        headers: {
-            Authorization: `Bearer ${accessToken}`,
-        },
-    });
-
-    if (response.status === 404) return null;
-
-    const responseText = await response.text();
-
-    if (!response.ok) {
-        const error = new Error(`OneDrive folder lookup failed: HTTP ${response.status}`);
-        error.statusCode = 502;
-        error.responsePreview = responseText.slice(0, 300);
+    try {
+        return await requestJson({ url, headers: { Authorization: `Bearer ${accessToken}` }, label: "OneDrive folder lookup" });
+    } catch (error) {
+        if (error.statusCode === 404) return null;
         throw error;
     }
-
-    return JSON.parse(responseText);
 };
 
 const createOneDriveFolder = async ({ accessToken, parentPath, folderName }) => {
     const cleanParentPath = String(parentPath || "").trim().replace(/^\/+|\/+$/g, "");
     const url = cleanParentPath
-        ? `https://graph.microsoft.com/v1.0/me/drive/root:/${encodeURI(cleanParentPath)}:/children`
+        ? `https://graph.microsoft.com/v1.0/me/drive/root:/${encodeDrivePath(cleanParentPath)}:/children`
         : "https://graph.microsoft.com/v1.0/me/drive/root/children";
-    const response = await fetch(url, {
-        method: "POST",
-        headers: {
-            Authorization: `Bearer ${accessToken}`,
-            "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-            name: folderName,
-            folder: {},
-            "@microsoft.graph.conflictBehavior": "fail",
-        }),
-    });
-    const responseText = await response.text();
-
-    if (response.status === 409) {
-        return getOneDriveItemByPath({
-            accessToken,
-            itemPath: joinOneDrivePath(parentPath, folderName),
+    try {
+        return await requestJson({
+            url,
+            method: "POST",
+            headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ name: folderName, folder: {}, "@microsoft.graph.conflictBehavior": "fail" }),
+            label: "OneDrive folder creation",
         });
-    }
-
-    if (!response.ok) {
-        const error = new Error(`OneDrive folder creation failed: HTTP ${response.status}`);
-        error.statusCode = 502;
-        error.responsePreview = responseText.slice(0, 300);
+    } catch (error) {
+        if (error.statusCode === 409) return getOneDriveItemByPath({
+            accessToken, itemPath: joinOneDrivePath(parentPath, folderName),
+        });
         throw error;
     }
-
-    return JSON.parse(responseText);
 };
 
 const ensureOneDriveFolderPath = async ({ accessToken, folderPath }) => {
+    if (folderCache.get(folderPath)) return;
+    if (pendingFolders.has(folderPath)) return pendingFolders.get(folderPath);
+    const pending = createOneDriveFolderPath({ accessToken, folderPath })
+        .then(() => folderCache.set(folderPath, true, 5 * 60 * 1000))
+        .finally(() => pendingFolders.delete(folderPath));
+    pendingFolders.set(folderPath, pending);
+    return pending;
+};
+
+const createOneDriveFolderPath = async ({ accessToken, folderPath }) => {
     const parts = String(folderPath || "").split("/").filter(Boolean);
     let currentPath = "";
 
@@ -219,44 +175,40 @@ const ensureOneDriveFolderPath = async ({ accessToken, folderPath }) => {
 const uploadFileToOneDrive = async ({ file, claimType = "promotions", slug }) => {
     validateFileForR2(file);
 
-    const accessToken = await getOneDriveAccessToken();
+    let accessToken = await getOneDriveAccessToken();
     const objectPath = buildOneDriveObjectPath({
         claimType,
         slug,
         originalName: file.originalname,
     });
 
-    await ensureOneDriveFolderPath({
-        accessToken,
-        folderPath: getFolderPath(objectPath),
-    });
+    const folderPath = getFolderPath(objectPath);
+    try {
+        await ensureOneDriveFolderPath({ accessToken, folderPath });
+    } catch (error) {
+        if (error.statusCode !== 401) throw error;
+        accessToken = await getOneDriveAccessToken({ rejectedToken: accessToken });
+        await ensureOneDriveFolderPath({ accessToken, folderPath });
+    }
 
-    const uploadUrl = `https://graph.microsoft.com/v1.0/me/drive/root:/${encodeURI(objectPath)}:/content`;
-    const response = await fetch(uploadUrl, {
+    const uploadUrl = `https://graph.microsoft.com/v1.0/me/drive/root:/${encodeDrivePath(objectPath)}:/content`;
+    const sendUpload = (token) => requestJson({
+        url: uploadUrl,
         method: "PUT",
         headers: {
-            Authorization: `Bearer ${accessToken}`,
+            Authorization: `Bearer ${token}`,
             "Content-Type": file.mimetype || "application/octet-stream",
         },
         body: file.buffer,
+        timeoutMs: 20000,
+        label: "OneDrive upload",
     });
-    const responseText = await response.text();
-
-    if (!response.ok) {
-        const error = new Error(`OneDrive upload failed: HTTP ${response.status}`);
-        error.statusCode = 502;
-        error.responsePreview = responseText.slice(0, 300);
-        throw error;
-    }
-
     let uploadedItem;
-
     try {
-        uploadedItem = JSON.parse(responseText);
+        uploadedItem = await sendUpload(accessToken);
     } catch (error) {
-        error.message = `Failed to parse OneDrive upload response JSON: ${error.message}`;
-        error.statusCode = 502;
-        throw error;
+        if (error.statusCode !== 401) throw error;
+        uploadedItem = await sendUpload(await getOneDriveAccessToken({ rejectedToken: accessToken }));
     }
 
     return {
@@ -269,7 +221,7 @@ const uploadFileToOneDrive = async ({ file, claimType = "promotions", slug }) =>
         content_type: file.mimetype,
         size: file.size,
         claim_type: normalizeClaimType(claimType),
-        slug: normalizePathSegment(slug, "slug"),
+        slug: normalizePathSegment(slug),
     };
 };
 

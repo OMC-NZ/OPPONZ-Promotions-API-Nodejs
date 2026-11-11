@@ -2,16 +2,13 @@ const { isRecaptchaEnabled, isStrictProductionSecurity } = require("../config/se
 const { verifyRecaptchaToken } = require("../services/recaptchaService");
 const { logSecurityEvent } = require("../services/securityLogService");
 const { sendError } = require("../utils/apiResponse");
+const { toScalarText } = require("../utils/text");
 
 const toRequestText = (value) => {
     if (value === undefined || value === null) return "";
 
-    const valueType = typeof value;
-    if (valueType === "string" || valueType === "number" || valueType === "boolean" || valueType === "bigint") {
-        return String(value).trim();
-    }
-
-    return null;
+    const text = toScalarText(value);
+    return text === null ? null : text.trim();
 };
 
 const getFirstRequestText = (...values) => {

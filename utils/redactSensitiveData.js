@@ -40,13 +40,11 @@ const addressKeys = new Set([
 const safeToString = (value) => {
     if (typeof value === "string") return value;
     if (typeof value === "symbol") return value.toString();
-    if (typeof value === "bigint") return value.toString();
 
     try {
         return String(value);
     } catch (error) {
-        const typeName = value?.constructor?.name || typeof value;
-        return `[UNSTRINGIFIABLE:${typeName}]`;
+        return "[UNSTRINGIFIABLE:value]";
     }
 };
 
@@ -68,6 +66,7 @@ const maskEmail = (value) => {
 };
 
 const maskTail = (value, visibleLength = 4) => {
+    if (typeof value === "object") return REDACTED;
     const text = safeToString(value);
     if (text.startsWith("[UNSTRINGIFIABLE:")) return REDACTED;
     if (text.length <= visibleLength) return "*".repeat(text.length);
@@ -115,6 +114,8 @@ const redactQueryValue = (key, value) => {
         return REDACTED;
     }
 
+    if (typeof value === "bigint") return value.toString();
+
     return value;
 };
 
@@ -142,8 +143,10 @@ const redactStringPatterns = (value) => {
         .replace(/((?:password|token|secret|api[_-]?key)=)[^&\s,;]+/gi, `$1${REDACTED}`);
 };
 
-const redactSensitiveData = (value, key, seen = new WeakSet()) => {
+const redactSensitiveData = (value, key, seen = new WeakSet(), depth = 0) => {
     if (value === null || value === undefined) return value;
+    if (depth > 12) return "[MAX_DEPTH]";
+    if (Buffer.isBuffer(value)) return `[BUFFER:${value.length} bytes]`;
 
     if (shouldFullyRedact(key)) {
         return REDACTED;
@@ -163,6 +166,8 @@ const redactSensitiveData = (value, key, seen = new WeakSet()) => {
         return REDACTED;
     }
 
+    if (typeof value === "bigint") return value.toString();
+
     if (typeof value === "string") {
         return redactStringPatterns(value);
     }
@@ -177,13 +182,13 @@ const redactSensitiveData = (value, key, seen = new WeakSet()) => {
     seen.add(value);
 
     if (Array.isArray(value)) {
-        return value.map((item) => redactSensitiveData(item, key, seen));
+        return value.map((item) => redactSensitiveData(item, key, seen, depth + 1));
     }
 
     return Object.fromEntries(
         Object.entries(value).map(([entryKey, entryValue]) => [
             entryKey,
-            redactSensitiveData(entryValue, entryKey, seen),
+            redactSensitiveData(entryValue, entryKey, seen, depth + 1),
         ])
     );
 };

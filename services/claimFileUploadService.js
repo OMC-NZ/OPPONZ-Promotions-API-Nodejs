@@ -1,24 +1,15 @@
 const config = require("../config/envConfig");
 const { uploadFileToOneDrive } = require("./oneDriveUploadService");
 const { uploadFileToR2, validateFileForR2 } = require("./r2UploadService");
+const { claimUploadFolders, normalizeClaimType } = require("../utils/claimFilePolicy");
 
 const getClaimUploadProvider = () => {
     return config.environment === "development" ? "onedrive" : "r2";
 };
 
-const claimStorageFolders = {
-    promotions: "claims/promotions",
-    events: "claims/events",
-};
-
-const normalizeClaimType = (claimType) => {
-    const key = String(claimType || "").trim().toLowerCase();
-    return claimStorageFolders[key] ? key : "promotions";
-};
-
 const getRelativeClaimFileKey = ({ key, claimType }) => {
     const normalizedKey = String(key || "").replace(/\\/g, "/").replace(/^\/+/, "");
-    const folder = claimStorageFolders[normalizeClaimType(claimType)];
+    const folder = claimUploadFolders[normalizeClaimType(claimType)];
     const marker = `${folder}/`;
     const markerIndex = normalizedKey.indexOf(marker);
 

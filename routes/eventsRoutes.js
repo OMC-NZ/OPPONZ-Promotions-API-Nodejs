@@ -1,14 +1,14 @@
 const express = require("express");
-const multer = require("multer");
+const { createClaimUpload } = require("../middlewares/claimUpload");
 const { getCurrentEvents, getEventForm, submitEventClaim } = require("../controllers/eventsController");
 const { verifyImeiChannel } = require("../controllers/imeiController");
 const { requireRecaptcha } = require("../middlewares/recaptchaMiddleware");
 const { methodNotAllowed } = require("../middlewares/routeSecurity");
 const { validateRequest } = require("../middlewares/validateRequest");
-const config = require("../config/envConfig");
 const {
     email,
     imei,
+    jsonObject,
     maoriEnglishName,
     optional,
     postcode,
@@ -21,25 +21,7 @@ const {
 const { publicReadRateLimiter, writeRateLimiter, imeiVerificationRateLimiter } = require("../config/securityConfig");
 
 const router = express.Router();
-const upload = multer({
-    storage: multer.memoryStorage(),
-    limits: {
-        fileSize: config.r2.uploadMaxBytes,
-        files: 10,
-    },
-});
-
-const parseEventClaimFiles = (req, res, next) => {
-    upload.any()(req, res, (error) => {
-        if (!error) return next();
-
-        error.statusCode = 400;
-        error.publicMessage = error.code === "LIMIT_FILE_SIZE"
-            ? "File is too large."
-            : "Invalid file upload.";
-        return next(error);
-    });
-};
+const parseEventClaimFiles = createClaimUpload({ maxFiles: 10 });
 
 router.route("/current")
     .get(
@@ -87,7 +69,7 @@ router.route("/:slug/claims")
                 city: [optional(), titleCaseText(), stringLength({ max: 255 })],
                 postcode: [optional(), postcode()],
                 instructions: [optional(), stringLength({ max: 255 })],
-                extra_data: [optional(), stringLength({ max: 10000 })],
+                extra_data: [optional(), stringLength({ max: 10000 }), jsonObject()],
                 recaptcha_token: [optional()],
                 recaptcha_action: recaptchaAction(["event_claim_submit"]),
             },

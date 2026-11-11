@@ -6,6 +6,9 @@ const { redactSensitiveData } = require("../utils/redactSensitiveData");
 
 const logDirectory = path.resolve(__dirname, "..", config.logs.directory);
 let cleanupTimer;
+const directoryPromises = new Map();
+const pendingWrites = new Map();
+const activeWrites = new Set();
 
 const logTypeDirectories = {
     request: {
@@ -26,29 +29,52 @@ const getLogTypeConfig = (type) => {
     return logTypeDirectories[type] || logTypeDirectories.request;
 };
 
-const getLogFilePath = (type) => {
-    const datePart = getNewZealandTime().slice(0, 10);
+const getLogFilePath = (type, timestamp) => {
+    const datePart = timestamp.slice(0, 10);
     const typeConfig = getLogTypeConfig(type);
     return path.join(logDirectory, typeConfig.directory, `${typeConfig.prefix}-${datePart}.log`);
 };
 
 const ensureLogDirectory = async (type) => {
-    await fs.mkdir(path.join(logDirectory, getLogTypeConfig(type).directory), { recursive: true });
+    const directory = path.join(logDirectory, getLogTypeConfig(type).directory);
+    if (!directoryPromises.has(directory)) {
+        directoryPromises.set(directory, fs.mkdir(directory, { recursive: true }).catch((error) => {
+            directoryPromises.delete(directory);
+            throw error;
+        }));
+    }
+    await directoryPromises.get(directory);
 };
 
-const writeLog = async (type, payload) => {
-    const timestamp = getNewZealandTime();
-    const entry = {
-        type,
-        ...redactSensitiveData(payload),
-    };
-
+const appendLog = async (type, payload) => {
     try {
+        const timestamp = getNewZealandTime();
+        const entry = { type, ...redactSensitiveData(payload) };
+        const filePath = getLogFilePath(type, timestamp);
+        const line = `${timestamp} ${JSON.stringify(entry)}\n`;
         await ensureLogDirectory(type);
-        await fs.appendFile(getLogFilePath(type), `${timestamp} ${JSON.stringify(entry)}\n`, "utf8");
+        const pending = (pendingWrites.get(filePath) || Promise.resolve())
+            .catch(() => {}).then(() => fs.appendFile(filePath, line, "utf8"));
+        pendingWrites.set(filePath, pending);
+        try {
+            await pending;
+        } finally {
+            if (pendingWrites.get(filePath) === pending) pendingWrites.delete(filePath);
+        }
     } catch (error) {
         console.error("Failed to write log file:", error.message);
     }
+};
+
+const writeLog = (type, payload) => {
+    const pending = appendLog(type, payload);
+    activeWrites.add(pending);
+    pending.finally(() => activeWrites.delete(pending));
+    return pending;
+};
+
+const flushLogs = async () => {
+    while (activeWrites.size > 0) await Promise.allSettled([...activeWrites]);
 };
 
 const cleanupDirectory = async (type) => {
@@ -92,4 +118,5 @@ module.exports = {
     writeLog,
     cleanupOldLogs,
     startLogCleanup,
+    flushLogs,
 };

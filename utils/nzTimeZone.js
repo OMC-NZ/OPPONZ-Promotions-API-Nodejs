@@ -1,4 +1,5 @@
 const moment = require("moment-timezone");
+const { normalizeText } = require("./text");
 
 const NZ_TIME_ZONE = "Pacific/Auckland";
 
@@ -11,11 +12,11 @@ function getNewZealandTimestamp() {
 }
 
 function toNewZealandDateTime(value) {
-  const input = String(value || "").trim();
+  const input = normalizeText(value);
   if (!input) return null;
 
   if (/^\d{4}-\d{2}-\d{2}$/.test(input)) {
-    return `${input} 00:00:00`;
+    return moment(input, "YYYY-MM-DD", true).isValid() ? `${input} 00:00:00` : null;
   }
 
   const parsed = moment.parseZone(input, moment.ISO_8601, true);

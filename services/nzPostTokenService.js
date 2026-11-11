@@ -1,5 +1,4 @@
-const https = require("https");
-const { URL } = require("url");
+const { requestJson } = require("../utils/httpJson");
 const config = require("../config/envConfig");
 
 let cachedToken = null;
@@ -26,60 +25,21 @@ const assertNZPostConfig = () => {
 const postTokenRequest = () => {
     assertNZPostConfig();
 
-    const tokenUrl = new URL(config.nzPost.tokenUrl);
     const body = new URLSearchParams({
         grant_type: "client_credentials",
         client_id: config.nzPost.clientId,
         client_secret: config.nzPost.clientSecret,
     }).toString();
 
-    const options = {
-        hostname: tokenUrl.hostname,
-        path: `${tokenUrl.pathname}${tokenUrl.search}`,
+    return requestJson({
+        url: config.nzPost.tokenUrl,
         method: "POST",
         headers: {
             "Content-Type": "application/x-www-form-urlencoded",
-            "Content-Length": Buffer.byteLength(body),
         },
-        timeout: 10000,
-    };
-
-    return new Promise((resolve, reject) => {
-        const request = https.request(options, (response) => {
-            let responseBody = "";
-
-            response.setEncoding("utf8");
-            response.on("data", (chunk) => {
-                responseBody += chunk;
-            });
-            response.on("end", () => {
-                let parsedBody;
-
-                try {
-                    parsedBody = responseBody ? JSON.parse(responseBody) : {};
-                } catch (error) {
-                    reject(new Error("Invalid JSON returned by NZ Post token endpoint."));
-                    return;
-                }
-
-                if (response.statusCode < 200 || response.statusCode >= 300) {
-                    const error = new Error(`NZ Post token endpoint returned HTTP ${response.statusCode}`);
-                    error.statusCode = response.statusCode;
-                    error.response = parsedBody;
-                    reject(error);
-                    return;
-                }
-
-                resolve(parsedBody);
-            });
-        });
-
-        request.on("timeout", () => {
-            request.destroy(new Error("NZ Post token request timed out."));
-        });
-        request.on("error", reject);
-        request.write(body);
-        request.end();
+        body,
+        label: "NZ Post token endpoint",
+        maxResponseBytes: 64 * 1024,
     });
 };
 
@@ -111,6 +71,9 @@ const refreshNZPostToken = async () => {
 };
 
 const getNZPostAccessToken = async (options = {}) => {
+    if (options.rejectedToken && isCachedTokenValid() && cachedToken.accessToken !== options.rejectedToken) {
+        return cachedToken;
+    }
     if (!options.forceRefresh && isCachedTokenValid()) {
         return cachedToken;
     }

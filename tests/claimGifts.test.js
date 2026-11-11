@@ -1,23 +1,7 @@
 const assert = require("node:assert/strict");
-const { readFileSync } = require("node:fs");
-const { createRequire } = require("node:module");
-const path = require("node:path");
 const { test } = require("node:test");
-const vm = require("node:vm");
+const { loadModule } = require("./helpers/loadModule");
 const { Op } = require("sequelize");
-
-// Load application modules with isolated database, upload, and email dependencies.
-const loadModule = (relativePath, mocks) => {
-    const filename = path.resolve(__dirname, "..", relativePath);
-    const localRequire = createRequire(filename);
-    const module = { exports: {} };
-    const wrapper = vm.runInThisContext(
-        `(function(require, module, exports) {\n${readFileSync(filename, "utf8")}\n})`,
-        { filename }
-    );
-    wrapper((name) => Object.hasOwn(mocks, name) ? mocks[name] : localRequire(name), module, module.exports);
-    return module.exports;
-};
 
 const now = "2026-10-23 12:00:00";
 const time = { getNewZealandTime: () => now, toNewZealandDateTime: () => now };
@@ -96,7 +80,7 @@ test("eligibility rejects a missing gift or a gift outside the promotion", async
     assert.equal((await checkEligibility({ redemptionStatus: 1 })).reason, "DEVICE_ALREADY_REDEEMED");
 });
 
-const submitClaim = async ({ eligible = true, failInsert = false } = {}) => {
+const submitClaim = async ({ eligible = true, failInsert = false, failAcquire = false, redeemed = false } = {}) => {
     const calls = [];
     const transaction = {
         commit: async () => calls.push("commit"),
@@ -113,15 +97,26 @@ const submitClaim = async ({ eligible = true, failInsert = false } = {}) => {
         Claims: { findByPk: async () => null, create: create("claim") },
         Deliver_Addresses: { create: create("address") },
         Claim_Gifts: { bulkCreate: create("gifts") },
+        Devices: { findByPk: async (imei, options) => {
+            assert.equal(options.lock, true);
+            calls.push("lock");
+            return { redemption_status: redeemed ? 1 : 0, update: create("device") };
+        } },
     };
+    const promotionContext = { models: {}, sequelize: {} };
     const controller = loadModule("controllers/claimsController.js", {
-        "../models": { models: { active }, sequelize: { transaction: async () => transaction } },
+        "../models": { models: { active }, getDBModelContext: () => promotionContext, sequelize: { transaction: async () => {
+            calls.push("begin");
+            if (failAcquire) throw new Error("Pool exhausted");
+            return transaction;
+        } } },
         "../services/claimConfirmationEmailService": {
             EMAIL_STATUS_FAILED: 0,
             queueClaimConfirmationEmail: () => calls.push("email"),
         },
         "../services/promotionEligibilityService": { checkPromotionEligibility: async (options) => {
             assert.deepEqual(options.giftAliases, aliases);
+            assert.equal(options.promotionContext, promotionContext);
             return {
                 eligible, gifts, promotion: { id: 7 }, reason: eligible ? undefined : "GIFT_NOT_LINKED_TO_PROMOTION",
                 device: { update: create("device") },
@@ -164,12 +159,27 @@ test("submission saves both gift links in the claim transaction before sending e
     assert.equal(calls.filter((call) => call.name === "customer").length, 1);
     assert.equal(calls.filter((call) => call.name === "claim").length, 1);
     assert.deepEqual(calls.slice(-2), ["commit", "email"]);
+    assert.equal(calls.filter((call) => call === "upload").length, 2);
+    assert.ok(calls.lastIndexOf("upload") < calls.indexOf("begin"));
 });
 
 test("invalid gifts stop submission before upload or database writes", async () => {
     const { calls, res } = await submitClaim({ eligible: false });
     assert.equal(res.statusCode, 400);
-    assert.deepEqual(calls, ["rollback"]);
+    assert.deepEqual(calls, []);
+});
+
+test("pool acquisition errors reach the error handler without an unhandled rejection", async () => {
+    const { calls, error } = await submitClaim({ failAcquire: true });
+    assert.equal(error.message, "Pool exhausted");
+    assert.equal(calls.includes("email"), false);
+});
+
+test("a device redeemed by a concurrent request cannot create a second claim", async () => {
+    const { calls, res } = await submitClaim({ redeemed: true });
+    assert.equal(res.statusCode, 400);
+    assert.equal(calls.some((call) => call.name === "claim"), false);
+    assert.equal(calls.at(-1), "rollback");
 });
 
 test("gift link insert failure rolls back and does not send confirmation email", async () => {
@@ -183,7 +193,10 @@ test("gift link insert failure rolls back and does not send confirmation email",
 test("confirmation email includes every saved gift in HTML and plain text", async () => {
     let mail;
     const service = loadModule("services/claimConfirmationEmailService.js", {
-        nodemailer: { createTransport: () => ({ sendMail: async (value) => { mail = value; } }) },
+        "./mailService": {
+            isEmailConfigured: () => true,
+            getTransporter: () => ({ sendMail: async (value) => { mail = value; } }),
+        },
         "../config/envConfig": { email: {
             host: "smtp.example.com", port: 587, user: "test", pass: "test",
             from: "test@example.com", trackingUrl: "https://example.com", serviceEmail: "test@example.com",

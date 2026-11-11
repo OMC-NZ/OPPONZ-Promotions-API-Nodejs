@@ -1,4 +1,5 @@
-const nodemailer = require("nodemailer");
+const { getTransporter, isEmailConfigured } = require("./mailService");
+const { formatGiftName, joinText, escapeHtml } = require("../utils/text");
 const config = require("../config/envConfig");
 const { models } = require("../models");
 const { getNewZealandTime } = require("../utils/nzTimeZone");
@@ -8,68 +9,17 @@ const EMAIL_STATUS_FAILED = 0;
 const EMAIL_STATUS_SENT = 1;
 const SUBJECT = "OPPONZ Promotions Claim Confirmation";
 
-let transporter;
-
-const isEmailConfigured = () => Boolean(
-    config.email.host &&
-    config.email.port &&
-    config.email.user &&
-    config.email.pass &&
-    config.email.from
-);
-
-const getTransporter = () => {
-    if (!transporter) {
-        transporter = nodemailer.createTransport({
-            host: config.email.host,
-            port: config.email.port,
-            secure: false,
-            requireTLS: true,
-            auth: {
-                user: config.email.user,
-                pass: config.email.pass,
-            },
-        });
-    }
-
-    return transporter;
-};
-
-const escapeHtml = (value) => {
-    return String(value ?? "")
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#39;");
-};
-
-const normalizeText = (value) => String(value || "").trim();
-
-const formatGiftName = (gift) => {
-    return [gift?.name, gift?.color]
-        .map(normalizeText)
-        .filter(Boolean)
-        .join(" ");
-};
-
 const formatFullName = (customer) => {
-    return [customer?.first_name, customer?.last_name]
-        .map(normalizeText)
-        .filter(Boolean)
-        .join(" ");
+    return joinText([customer?.first_name, customer?.last_name]);
 };
 
 const formatDeliveryAddress = (address) => {
-    return [
+    return joinText([
         address?.street,
         address?.suburb,
         address?.city,
         address?.postcode,
-    ]
-        .map(normalizeText)
-        .filter(Boolean)
-        .join(", ");
+    ], ", ");
 };
 
 const serializeEmailError = (error) => ({

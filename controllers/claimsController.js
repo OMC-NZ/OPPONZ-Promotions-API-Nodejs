@@ -1,5 +1,7 @@
-const crypto = require("crypto");
-const { sequelize, models } = require("../models");
+const { normalizeText, formatGiftName } = require("../utils/text");
+const { generateUniqueClaimId } = require("../utils/claimId");
+const { rollbackTransaction } = require("../utils/dbTransaction");
+const { sequelize, models, getDBModelContext } = require("../models");
 const {
     EMAIL_STATUS_FAILED,
     queueClaimConfirmationEmail,
@@ -13,9 +15,6 @@ const CLAIM_STATUS_PENDING = 0;
 const CLAIM_STATUS_SHIPPED = 2;
 const DEVICE_REDEMPTION_STATUS_CLAIMED = 1;
 const CLAIM_ID_PREFIX = "OPNZPROCLM";
-const CLAIM_ID_RANDOM_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-
-const normalizeText = (value) => String(value || "").trim();
 
 const getUploadedFile = (req, fieldNames) => {
     const names = Array.isArray(fieldNames) ? fieldNames : [fieldNames];
@@ -26,40 +25,6 @@ const getUploadedFile = (req, fieldNames) => {
     }
 
     return null;
-};
-
-const formatGiftName = (gift) => {
-    return [gift.name, gift.color]
-        .map(normalizeText)
-        .filter(Boolean)
-        .join(" ");
-};
-
-const getClaimIdDatePart = (newZealandDateTime) => {
-    return `${newZealandDateTime.slice(2, 4)}${newZealandDateTime.slice(5, 7)}${newZealandDateTime.slice(8, 10)}`;
-};
-
-const generateClaimIdRandomPart = () => {
-    const randomBytes = crypto.randomBytes(8);
-
-    return [...randomBytes]
-        .map((byte) => CLAIM_ID_RANDOM_ALPHABET[byte % CLAIM_ID_RANDOM_ALPHABET.length])
-        .join("");
-};
-
-const generateClaimId = (newZealandDateTime) => {
-    return `${CLAIM_ID_PREFIX}-${getClaimIdDatePart(newZealandDateTime)}-${generateClaimIdRandomPart()}`;
-};
-
-const generateUniqueClaimId = async (Claims, newZealandDateTime, transaction) => {
-    for (let attempt = 0; attempt < 5; attempt += 1) {
-        const claimId = generateClaimId(newZealandDateTime);
-        const existingClaim = await Claims.findByPk(claimId, { transaction });
-
-        if (!existingClaim) return claimId;
-    }
-
-    throw new Error("Failed to generate a unique claim ID.");
 };
 
 const getCurrentTrackLink = (deliverAddresses = []) => {
@@ -160,7 +125,7 @@ const getClaimStatus = async (req, res, next) => {
 };
 
 const submitClaim = async (req, res, next) => {
-    const transaction = await sequelize.transaction();
+    let transaction;
 
     try {
         const promotionId = req.body.promotion_id;
@@ -206,11 +171,11 @@ const submitClaim = async (req, res, next) => {
         let storedScreenshotUrl = normalizeText(screenshotUrl);
 
         if (missingFields.length > 0) {
-            await transaction.rollback();
             return sendError(req, res, {
                 statusCode: 400,
                 message: "Submission failed. Please check your details and submit again.",
                 code: "CLAIM_REQUIRED_FIELDS_MISSING",
+                debug: { missingFields: missingFields.map(([field]) => field) },
                 includeRequestId: false,
                 includeCode: false,
                 includeDebug: false,
@@ -218,7 +183,6 @@ const submitClaim = async (req, res, next) => {
         }
 
         if (!purchaseDate) {
-            await transaction.rollback();
             return sendError(req, res, {
                 statusCode: 400,
                 message: "Submission failed. Please check your details and submit again.",
@@ -233,11 +197,11 @@ const submitClaim = async (req, res, next) => {
             if (receiptFile) validateClaimFile(receiptFile);
             if (screenshotFile) validateClaimFile(screenshotFile);
         } catch (error) {
-            await transaction.rollback();
             return sendError(req, res, {
                 statusCode: error.statusCode || 400,
                 message: "Submission failed. Please check your files and submit again.",
                 code: "CLAIM_FILE_VALIDATION_ERROR",
+                debug: { reason: error.message },
                 includeRequestId: false,
                 includeCode: false,
                 includeDebug: false,
@@ -249,6 +213,7 @@ const submitClaim = async (req, res, next) => {
             Claims,
             Deliver_Addresses,
             Claim_Gifts,
+            Devices,
         } = models.active;
 
         const eligibility = await checkPromotionEligibility({
@@ -256,11 +221,10 @@ const submitClaim = async (req, res, next) => {
             purchaseDateInput,
             promotionId,
             giftAliases: selectedGiftAliases,
-            transaction,
+            promotionContext: getDBModelContext(),
         });
 
         if (!eligibility.eligible) {
-            await transaction.rollback();
             return sendError(req, res, {
                 statusCode: 400,
                 message: "Submission failed. Please check your details and submit again.",
@@ -306,6 +270,20 @@ const submitClaim = async (req, res, next) => {
             storedScreenshotUrl = screenshotUpload.file_name;
         }
 
+        transaction = await sequelize.transaction();
+        const lockedDevice = await Devices.findByPk(imei, { transaction, lock: true });
+        if (!lockedDevice || Number(lockedDevice.redemption_status) !== 0
+            || lockedDevice.model !== device.model || lockedDevice.channel_code !== device.channel_code) {
+            await rollbackTransaction(transaction);
+            return sendError(req, res, {
+                statusCode: 400,
+                message: "Submission failed. Please check your details and submit again.",
+                code: "CLAIM_ELIGIBILITY_ERROR",
+                debug: { reason: "DEVICE_CHANGED_OR_ALREADY_REDEEMED" },
+                includeRequestId: false, includeCode: false, includeDebug: false,
+            });
+        }
+
         const customer = await Customers.create({
             first_name: firstName,
             last_name: lastName,
@@ -314,7 +292,7 @@ const submitClaim = async (req, res, next) => {
             updated_at: now,
         }, { transaction });
 
-        const claimId = await generateUniqueClaimId(Claims, now, transaction);
+        const claimId = await generateUniqueClaimId({ model: Claims, prefix: CLAIM_ID_PREFIX, dateTime: now, transaction });
 
         await Claims.create({
             id: claimId,
@@ -347,7 +325,7 @@ const submitClaim = async (req, res, next) => {
             gift_id: gift.id,
         })), { transaction });
 
-        await device.update({
+        await lockedDevice.update({
             redemption_status: DEVICE_REDEMPTION_STATUS_CLAIMED,
             updated_at: now,
         }, { transaction });
@@ -364,7 +342,7 @@ const submitClaim = async (req, res, next) => {
             },
         });
     } catch (error) {
-        await transaction.rollback();
+        await rollbackTransaction(transaction);
         error.status = 500;
         error.publicMessage = "Failed to submit claim.";
         error.includeRequestId = false;

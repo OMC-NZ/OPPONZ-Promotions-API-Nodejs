@@ -1,5 +1,6 @@
 const { writeLog } = require("../services/logService");
 const { getRequestLogContext } = require("../utils/requestLogContext");
+const { redactSensitiveData } = require("../utils/redactSensitiveData");
 
 const requestLogger = (req, res, next) => {
     const startedAt = process.hrtime.bigint();
@@ -43,7 +44,7 @@ const requestLogger = (req, res, next) => {
             consolePayload.security = logPayload.security;
         }
 
-        console.log("[api request]", consolePayload);
+        console.log("[api request]", redactSensitiveData(consolePayload));
 
         writeLog("request", logPayload);
 

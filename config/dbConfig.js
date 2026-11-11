@@ -2,34 +2,46 @@ const { Sequelize } = require("sequelize");
 const config = require("./envConfig");
 
 let activeDatabase;
+let dbDatabase;
 
 const isDevelopment = config.environment === "development";
 const activeConfig = isDevelopment ? config.ddb : config.db;
 const activeDatabaseLabel = isDevelopment ? "Development" : "Production";
 const activeDialect = isDevelopment ? "mysql" : "mariadb";
 
-const connectDatabase = () => {
+const createDatabaseConnection = (databaseConfig, dialect, label) => {
   const logging = isDevelopment ? console.log : false;
 
-  if (!activeConfig.host || !activeConfig.user || !activeConfig.name) {
-    throw new Error(`${activeDatabaseLabel} database configuration is incomplete.`);
+  if (!databaseConfig.host || !databaseConfig.user || !databaseConfig.name) {
+    throw new Error(`${label} database configuration is incomplete.`);
   }
 
-  activeDatabase = new Sequelize(activeConfig.name, activeConfig.user, activeConfig.pass, {
-    host: activeConfig.host,
-    port: activeConfig.port,
-    dialect: activeDialect,
+  return new Sequelize(databaseConfig.name, databaseConfig.user, databaseConfig.pass, {
+    host: databaseConfig.host,
+    port: databaseConfig.port,
+    dialect,
     logging,
     pool: {
-      max: activeConfig.poolMax,
-      min: activeConfig.poolMin,
-      acquire: activeConfig.acquire,
-      idle: activeConfig.idle,
+      max: databaseConfig.poolMax,
+      min: databaseConfig.poolMin,
+      acquire: databaseConfig.acquire,
+      idle: databaseConfig.idle,
     },
     dialectOptions: {
-      connectTimeout: activeConfig.connectTimeout,
+      connectTimeout: databaseConfig.connectTimeout,
     },
   });
+};
+
+const connectDatabase = () => {
+  if (!activeDatabase) activeDatabase = createDatabaseConnection(activeConfig, activeDialect, activeDatabaseLabel);
+  return activeDatabase;
+};
+
+const getDBConnection = () => {
+  if (!isDevelopment) return connectDatabase();
+  if (!dbDatabase) dbDatabase = createDatabaseConnection(config.getCurrentListDatabaseConfig(), "mariadb", "DB");
+  return dbDatabase;
 };
 
 const getDatabase = () => {
@@ -41,7 +53,7 @@ const getDatabase = () => {
     sequelize: activeDatabase,
     activeDatabase,
     activeDatabaseLabel,
-    sequelizeDB: isDevelopment ? undefined : activeDatabase,
+    sequelizeDB: isDevelopment ? dbDatabase : activeDatabase,
     sequelizeDDB: isDevelopment ? activeDatabase : undefined,
   };
 };
@@ -63,13 +75,14 @@ const testConnection = async () => {
 };
 
 const closeDatabases = async () => {
-  try {
-    if (activeDatabase) await activeDatabase.close();
-    activeDatabase = undefined;
-    console.log("Database connection closed.");
-  } catch (error) {
-    console.error("Error closing database connection:", error);
+  const databases = [...new Set([activeDatabase, dbDatabase].filter(Boolean))];
+  const results = await Promise.allSettled(databases.map((database) => database.close()));
+  activeDatabase = undefined;
+  dbDatabase = undefined;
+  for (const result of results) {
+    if (result.status === "rejected") console.error("Error closing database connection:", result.reason);
   }
+  console.log("Database connection closed.");
 };
 
-module.exports = { connectDatabase, getDatabase, testConnection, closeDatabases };
+module.exports = { connectDatabase, getDatabase, getDBConnection, testConnection, closeDatabases };
