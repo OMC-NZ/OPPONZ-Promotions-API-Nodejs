@@ -48,8 +48,8 @@ const verifyImei = async (req, res, next) => {
         const { imei, purchase_date: purchaseDateInput } = req.body;
         const requestTime = getNewZealandTime();
         const purchaseDate = toNewZealandDateTime(purchaseDateInput);
+        const { Devices } = models.active;
         const {
-            Devices,
             Channels,
             Promotions,
             Promotion_Gifts,

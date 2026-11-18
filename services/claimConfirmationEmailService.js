@@ -1,7 +1,8 @@
 const { getTransporter, isEmailConfigured } = require("./mailService");
 const { formatGiftName, joinText, escapeHtml } = require("../utils/text");
 const config = require("../config/envConfig");
-const { models } = require("../models");
+const { models, getDBModelContext } = require("../models");
+const { Op } = require("sequelize");
 const { getNewZealandTime } = require("../utils/nzTimeZone");
 const { writeLog } = require("./logService");
 
@@ -128,8 +129,8 @@ const loadClaimEmailData = async (claimId) => {
         Customers,
         Deliver_Addresses,
         Claim_Gifts,
-        Gifts,
     } = models.active;
+    const useSeparateGiftCatalog = config.useDevelopmentDatabase;
 
     const claim = await Claims.findByPk(claimId);
     if (!claim) return null;
@@ -139,11 +140,19 @@ const loadClaimEmailData = async (claimId) => {
         Deliver_Addresses.findOne({ where: { claim_id: claimId, is_current: 1 } }),
         Claim_Gifts.findAll({
             where: { claim_id: claimId },
-            include: [{ model: Gifts, as: "gift" }],
+            include: useSeparateGiftCatalog ? undefined : [{ model: models.active.Gifts, as: "gift" }],
             order: [["id", "ASC"]],
         }),
     ]);
-    const gifts = claimGifts.map((item) => item.gift).filter(Boolean);
+    let gifts = claimGifts.map((item) => item.gift).filter(Boolean);
+    if (useSeparateGiftCatalog && claimGifts.length > 0) {
+        const { Gifts } = getDBModelContext().models;
+        const catalogGifts = await Gifts.findAll({
+            where: { id: { [Op.in]: [...new Set(claimGifts.map((item) => item.gift_id))] } },
+        });
+        const giftsById = new Map(catalogGifts.map((gift) => [String(gift.id), gift]));
+        gifts = claimGifts.map((item) => giftsById.get(String(item.gift_id))).filter(Boolean);
+    }
 
     return {
         claim,

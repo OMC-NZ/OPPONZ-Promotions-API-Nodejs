@@ -78,6 +78,18 @@ const buildDatabaseConfig = (prefix, values = process.env) => ({
 });
 
 const db = buildDatabaseConfig("DB");
+const localProductionDatabaseTest = runtimeEnvironment === "production"
+    && environmentEnvFileName === ".env.test.prod"
+    && parseBoolean(process.env.LOCAL_PRODUCTION_TEST);
+const useDevelopmentDatabase = runtimeEnvironment === "development" || localProductionDatabaseTest;
+// Read only DDB settings; keep the selected runtime environment untouched.
+const developmentDatabaseValues = localProductionDatabaseTest
+    ? dotenv.parse(fs.readFileSync(path.resolve(__dirname, "../.env.development")))
+    : process.env;
+const ddb = {
+    ...buildDatabaseConfig("DDB", developmentDatabaseValues),
+    required: developmentDatabaseValues.DDB_REQUIRED === "true",
+};
 let currentListDatabaseConfig;
 
 const getCurrentListDatabaseConfig = () => {
@@ -93,6 +105,7 @@ const getCurrentListDatabaseConfig = () => {
 
 module.exports = {
     environment: runtimeEnvironment,
+    useDevelopmentDatabase,
     getCurrentListDatabaseConfig,
     envFiles: {
         base: baseEnvPath,
@@ -120,10 +133,7 @@ module.exports = {
         keepAliveTimeoutMs: parseInteger(process.env.SERVER_KEEP_ALIVE_TIMEOUT_MS, 5000),
     },
     db,
-    ddb: {
-        ...buildDatabaseConfig("DDB"),
-        required: process.env.DDB_REQUIRED === "true",
-    },
+    ddb,
     email: {
         host: process.env.EMAIL_HOST,
         port: parseInteger(process.env.EMAIL_PORT, undefined),

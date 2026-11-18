@@ -68,8 +68,8 @@ const checkPromotionEligibility = async ({
     transaction,
     promotionContext = { sequelize, models: models.active },
 }) => {
-    const { Devices, Gifts } = models.active;
-    const { Promotions, Promotion_Gifts, Gifts: promotionCatalogGifts } = promotionContext.models;
+    const { Devices } = models.active;
+    const { Promotions, Promotion_Gifts, Gifts } = promotionContext.models;
     // Transactions belong to one connection and must not cross the DB/DDB boundary.
     const promotionTransaction = promotionContext.sequelize === sequelize ? transaction : undefined;
     const requestTime = getNewZealandTime();
@@ -83,7 +83,7 @@ const checkPromotionEligibility = async ({
         }),
         Gifts.findAll({
             where: { alias: { [Op.in]: giftAliases } },
-            transaction,
+            transaction: promotionTransaction,
         }),
     ]);
     const giftsByAlias = new Map(matchingGifts.map((gift) => [gift.alias, gift]));
@@ -140,21 +140,17 @@ const checkPromotionEligibility = async ({
         };
     }
 
-    const catalogGifts = promotionCatalogGifts === Gifts ? gifts : await promotionCatalogGifts.findAll({
-        where: { alias: { [Op.in]: giftAliases } },
-        transaction: promotionTransaction,
-    });
-    const catalogGiftIdsByAlias = new Map(catalogGifts.map((gift) => [gift.alias, gift.id]));
-    const promotionGifts = catalogGifts.length === 0 ? [] : await Promotion_Gifts.findAll({
+    const promotionGifts = await Promotion_Gifts.findAll({
         where: {
             promotion_id: promotionId,
-            gift_id: { [Op.in]: catalogGifts.map((gift) => gift.id) },
+            gift_id: { [Op.in]: gifts.map((gift) => gift.id) },
         },
         transaction: promotionTransaction,
     });
 
     const linkedGiftIds = new Set(promotionGifts.map((item) => item.gift_id));
-    const unlinkedGiftAliases = giftAliases.filter((alias) => !linkedGiftIds.has(catalogGiftIdsByAlias.get(alias)));
+    const unlinkedGiftAliases = gifts.filter((gift) => !linkedGiftIds.has(gift.id))
+        .map((gift) => gift.alias);
 
     if (unlinkedGiftAliases.length > 0) {
         return {

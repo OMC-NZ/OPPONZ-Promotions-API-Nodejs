@@ -4,8 +4,8 @@ const dotenv = require("dotenv");
 const { test } = require("node:test");
 const { loadModule } = require("./helpers/loadModule");
 
-const loadConfig = (environment, environmentFile) => {
-    const env = { NODE_ENV: environment, ...(environmentFile ? { ENV_FILE: environmentFile } : {}) };
+const loadConfig = (environment, environmentFile, localProductionTest = false) => {
+    const env = { NODE_ENV: environment, LOCAL_PRODUCTION_TEST: String(localProductionTest), ...(environmentFile ? { ENV_FILE: environmentFile } : {}) };
     const files = {
         ".env": "DB_POOL_MAX=8\n",
         ".env.development": [
@@ -20,6 +20,7 @@ const loadConfig = (environment, environmentFile) => {
         ".env.test.prod": "DB_HOST=test.example.invalid\nDB_USER=test\nDB_PASS=test-password\nDB_NAME=test-production\nAPP_PORT=3000\n",
     };
     let isolatedReads = 0;
+    const readFiles = [];
     const config = loadModule("config/envConfig.js", {
         dotenv: {
             parse: dotenv.parse,
@@ -32,12 +33,14 @@ const loadConfig = (environment, environmentFile) => {
             },
         },
         fs: { readFileSync: (file) => {
-            assert.equal(path.basename(file), ".env.production");
+            const name = path.basename(file);
+            assert.ok([".env.production", ".env.development"].includes(name));
+            readFiles.push(name);
             isolatedReads += 1;
-            return Buffer.from(files[".env.production"]);
+            return Buffer.from(files[name]);
         } },
     }, { process: { env }, __dirname: path.resolve(__dirname, "../config") });
-    return { config, env, isolatedReads: () => isolatedReads };
+    return { config, env, readFiles, isolatedReads: () => isolatedReads };
 };
 
 test("development current-list DB settings load from production without requiring DB_* in development", () => {
@@ -53,6 +56,7 @@ test("development current-list DB settings load from production without requirin
     assert.equal(isolatedReads(), 1);
     assert.equal(config.ddb.name, "development");
     assert.equal(config.environment, "development");
+    assert.equal(config.useDevelopmentDatabase, true);
     assert.equal(config.app.port, 3000);
     assert.deepEqual(config.app.corsOrigins, ["http://localhost:3001"]);
     assert.equal(env.RECAPTCHA_DISABLED, "1");
@@ -64,13 +68,30 @@ test("production retains its normal DB settings without an extra production-file
     const { config, isolatedReads } = loadConfig("production");
     assert.equal(config.getCurrentListDatabaseConfig(), config.db);
     assert.equal(config.db.name, "production");
+    assert.equal(config.useDevelopmentDatabase, false);
     assert.equal(isolatedReads(), 0);
 });
 
-test("local production-env testing continues to use .env.test.prod DB settings", () => {
-    const { config, isolatedReads } = loadConfig("production", ".env.test.prod");
+test("local production-env testing uses development DDB without replacing test-prod DB or runtime settings", () => {
+    const { config, env, readFiles } = loadConfig("production", ".env.test.prod", true);
     assert.equal(config.getCurrentListDatabaseConfig().name, "test-production");
     assert.equal(config.db.host, "test.example.invalid");
+    assert.equal(config.ddb.name, "development");
+    assert.equal(config.ddb.host, "dev.example.invalid");
+    assert.equal(config.useDevelopmentDatabase, true);
+    assert.equal(config.environment, "production");
     assert.equal(config.app.port, 3000);
-    assert.equal(isolatedReads(), 0);
+    assert.deepEqual(readFiles, [".env.development"]);
+    assert.equal(env.NODE_ENV, "production");
+    assert.equal(env.DDB_HOST, undefined);
+    assert.equal(env.RECAPTCHA_DISABLED, undefined);
+    assert.equal(env.CORS_ORIGINS, undefined);
+});
+
+test("production cannot select DDB from the local flag alone or the test environment filename alone", () => {
+    for (const [file, flag] of [[".env.production", true], [".env.test.prod", false]]) {
+        const { config, readFiles } = loadConfig("production", file, flag);
+        assert.equal(config.useDevelopmentDatabase, false);
+        assert.deepEqual(readFiles, []);
+    }
 });

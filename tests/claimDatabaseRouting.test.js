@@ -9,7 +9,7 @@ const time = {
 };
 const giftAliases = ["earbuds-white", "watch-black"];
 
-const claimHarness = ({ production = false, missingGift = false, unlinkedGift = false, failDB = false } = {}) => {
+const claimHarness = ({ production = false, missingGift = false, unlinkedGift = false, failDB = false, failGiftLookup = false } = {}) => {
     const reads = [];
     const writes = [];
     const uploads = [];
@@ -44,16 +44,14 @@ const claimHarness = ({ production = false, missingGift = false, unlinkedGift = 
                 return { ...device, update: recordWrite("Devices") };
             },
         },
-        Gifts: { findAll: async (options) => {
-            reads.push({ table: "destination Gifts", options });
-            return missingGift ? destinationGifts.slice(0, 1) : destinationGifts;
-        } },
+        Gifts: { findAll: () => assert.fail("Development claim submission must not query DDB Gifts") },
     };
     const catalogGifts = production ? destinationGifts : destinationGifts.map((gift) => ({ ...gift, id: gift.id + 100 }));
     const dbRead = (table, result) => async (...args) => {
         const options = table === "Promotions" ? args[1] : args[0];
         reads.push({ table, options });
         if (failDB && table === "Promotions") throw new Error("DB unavailable");
+        if (failGiftLookup && table === "catalog Gifts") throw new Error("DB gift lookup failed");
         return result;
     };
     const dbModels = {
@@ -61,10 +59,10 @@ const claimHarness = ({ production = false, missingGift = false, unlinkedGift = 
         Promotion_Devices: { findAll: dbRead("Promotion_Devices", [{ promotion_id: 7 }]) },
         Promotion_Channels: { findAll: dbRead("Promotion_Channels", [{ promotion_id: 7 }]) },
         Promotion_Gifts: { findAll: dbRead("Promotion_Gifts", catalogGifts.slice(0, unlinkedGift ? 1 : 2).map((gift) => ({ gift_id: gift.id }))) },
-        Gifts: { findAll: dbRead("catalog Gifts", catalogGifts) },
+        Gifts: { findAll: dbRead("catalog Gifts", missingGift ? catalogGifts.slice(0, 1) : catalogGifts) },
     };
     const dbContext = production
-        ? { sequelize: activeSequelize, models: Object.assign(active, { ...dbModels, Gifts: active.Gifts }) }
+        ? { sequelize: activeSequelize, models: Object.assign(active, dbModels) }
         : { sequelize: { escape: () => "'DB_TIME'", transaction: () => assert.fail("No DB write transaction in development") }, models: dbModels };
     const modelModule = { sequelize: activeSequelize, models: { active }, getDBModelContext: () => dbContext };
     const service = loadModule("services/promotionEligibilityService.js", {
@@ -110,12 +108,12 @@ test("development claims read DB promotion configuration but write only active D
     assert.equal(error, undefined);
     assert.equal(res.statusCode, 201);
     assert.deepEqual(reads.map((item) => item.table).sort(), [
-        "Promotion_Channels", "Promotion_Devices", "Promotion_Gifts", "Promotions", "catalog Gifts", "destination Devices", "destination Gifts",
+        "Promotion_Channels", "Promotion_Devices", "Promotion_Gifts", "Promotions", "catalog Gifts", "destination Devices",
     ]);
     assert.deepEqual(reads.find((item) => item.table === "Promotion_Gifts").options.where.gift_id[Op.in], [111, 112]);
     assert.deepEqual(writes.map((item) => item.table), ["begin", "Customers", "Claims", "Deliver_Addresses", "Claim_Gifts", "Devices", "commit", "email"]);
     assert.equal(writes.find((item) => item.table === "Claims").values.promotion_id, 7);
-    assert.deepEqual(writes.find((item) => item.table === "Claim_Gifts").values.map((item) => item.gift_id), [11, 12]);
+    assert.deepEqual(writes.find((item) => item.table === "Claim_Gifts").values.map((item) => item.gift_id), [111, 112]);
     assert.equal(uploads.length, 2);
     assert.ok(uploads.every((item) => item.slug === 7 && item.claimType === "promotions"));
 });
@@ -153,7 +151,7 @@ test("production submissions still save customers, claims, addresses and gifts t
     assert.deepEqual(writes.map((item) => item.table), ["begin", "Customers", "Claims", "Deliver_Addresses", "Claim_Gifts", "Devices", "commit", "email"]);
 });
 
-test("missing destination gifts and unlinked DB gifts stop before upload or writes", async () => {
+test("missing DB gifts and unlinked DB gifts stop before upload or writes", async () => {
     for (const [options, reason] of [
         [{ missingGift: true }, "GIFT_NOT_FOUND"],
         [{ unlinkedGift: true }, "GIFT_NOT_LINKED_TO_PROMOTION"],
@@ -171,6 +169,14 @@ test("DB read failure never falls back to DDB promotion data or starts writes", 
     const { writes, uploads, submit } = claimHarness({ failDB: true });
     const { error } = await submit();
     assert.equal(error.message, "DB unavailable");
+    assert.deepEqual(writes, []);
+    assert.deepEqual(uploads, []);
+});
+
+test("DB gift lookup failure does not fall back to DDB Gifts or start uploads or writes", async () => {
+    const { writes, uploads, submit } = claimHarness({ failGiftLookup: true });
+    const { error } = await submit();
+    assert.equal(error.message, "DB gift lookup failed");
     assert.deepEqual(writes, []);
     assert.deepEqual(uploads, []);
 });

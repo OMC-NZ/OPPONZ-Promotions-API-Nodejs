@@ -13,7 +13,7 @@ npm start
 ```
 
 - `npm run dev` starts the API in development mode.
-- `npm run dev:prod-env` starts the API locally with `NODE_ENV=production`, loads `.env.test.prod`, and sets `LOCAL_PRODUCTION_TEST=true`. Use this for local production-environment testing without using the real `.env.production` file.
+- `npm run dev:prod-env` starts the API locally with `NODE_ENV=production`, loads `.env.test.prod`, and sets `LOCAL_PRODUCTION_TEST=true`. It uses the same DB/DDB routing as development: active reads/writes use development DDB, while explicitly DB-bound queries use `.env.test.prod` DB settings. Other production-test settings are unchanged.
 - `npm start` starts the API in production mode.
 
 ## Environment Files
@@ -31,19 +31,22 @@ The following endpoints always read the database configured by `DB_*`, including
 
 - `GET /api/promotions/current`
 - `GET /api/events/current`
-- `POST /api/promotions/verify-imei-purchase`
 
-All device, model eligibility, promotion, gift and channel queries inside promotion IMEI verification use that same DB connection. In development, a separate DB connection pool is initialized only when one of these endpoints is called; in production, the existing DB pool is reused.
+`POST /api/promotions/verify-imei-purchase` reads only `Devices` through the active environment connection: DDB in `npm run dev` and `dev:prod-env` (currently `OMC_Promotions_Dev`), and DB in real production. The remaining six tables (`Promotion_Devices`, `Promotion_Channels`, `Promotions`, `Promotion_Gifts`, `Channels`, and `Gifts`) continue to use DB. Device model, channel, and redemption status come from the selected device record; a missing or redeemed DDB device does not fall back to DB. This endpoint does not write data.
 
-`POST /api/claims` also reads promotion configuration from DB: `Promotions`, `Promotion_Devices`, `Promotion_Channels`, `Promotion_Gifts`, and the gift catalog used to validate promotion links. In development, device availability and destination gift IDs are read from DDB. Customers, claims, delivery addresses, claim-gift links, and device updates remain in one DDB transaction; confirmation email status also stays in DDB. Production and `dev:prod-env` continue to read and write DB as before. Gift aliases are matched between catalogs; DB gift IDs are never inserted into DDB claim-gift links.
+In development and `dev:prod-env`, the separate DB connection pool for DB-bound reads is initialized on demand; in real production, the existing DB pool is reused.
 
-DDB must still contain the referenced promotion ID and gift records for local test submissions. Its foreign keys remain enabled: reading an activity from DB does not create the corresponding parent row in DDB or bypass referential integrity. The API does not automatically copy production records into DDB.
+`POST /api/claims` reads promotion configuration and gifts from DB: `Promotions`, `Promotion_Devices`, `Promotion_Channels`, `Promotion_Gifts`, and `Gifts`. In development and `dev:prod-env`, only device availability is read from DDB during eligibility checking; the submission does not query DDB `Gifts`. Selected gift IDs come directly from DB. Customers, claims, delivery addresses, claim-gift links, and device updates remain in one DDB transaction. Confirmation emails read the saved claim, customer, address, and gift links from DDB, fetch gift details separately from DB, and update email status in DDB. Real production continues to read and write only DB.
 
-Other endpoints keep their existing routing: development uses `DDB_*`, while production and `dev:prod-env` use `DB_*`. This includes event IMEI/channel verification, event forms, and claim tracking.
+DDB must still contain the referenced promotion ID and gift records with the same IDs and meanings as DB for local test submissions. In particular, DDB `Claim_Gifts.gift_id` now stores the DB gift ID, so an unrelated DDB gift with that ID is not a valid replacement. Its foreign keys remain enabled: reading an activity or gift from DB does not create the corresponding parent row in DDB or bypass referential integrity. The API does not automatically copy production records into DDB.
+
+Other endpoints use the active database: DDB in development and `dev:prod-env`, and DB in real production. This includes event IMEI/channel verification, event forms, event submissions, and claim tracking.
 
 When running `npm run dev`, these DB-bound reads use only the `DB_*` database settings from `.env.production`, parsed in isolation. Development ports, reCAPTCHA switches, CORS, upload providers, and `DDB_*` settings continue to come from the normal development environment. No production settings are copied into `process.env` or written to an environment file. Keep `.env.production` available locally with the intended DB credentials.
 
-Production startup continues to use `.env.production` normally. `dev:prod-env` continues to use the `DB_*` settings in `.env.test.prod`. These endpoints do not fall back to `DDB_*` if DB settings or the DB connection are unavailable.
+`dev:prod-env` reads only DDB settings from `.env.development`, parsed in isolation, and uses the DB settings from `.env.test.prod`. It does not import development ports, security switches, or upload settings. This split mode requires both `.env.test.prod` and `LOCAL_PRODUCTION_TEST=true`; the flag alone does not switch a normal `.env.production` startup to DDB. Missing DDB settings fail explicitly, without falling back to production DB for writes. Missing DB settings likewise do not fall back to DDB for DB-bound queries.
+
+Real production startup continues to use `.env.production` normally, with all database reads and writes on DB. Environment files are not rewritten by this routing logic.
 
 ## Claim Gifts
 

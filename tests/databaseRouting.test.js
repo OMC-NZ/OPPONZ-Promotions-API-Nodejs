@@ -9,9 +9,9 @@ const databaseSettings = (name) => ({
     poolMax: 10, poolMin: 0, acquire: 30000, idle: 10000, connectTimeout: 20000,
 });
 
-const connectionHarness = (environment, db = databaseSettings("db_database")) => {
+const connectionHarness = (environment, db = databaseSettings("db_database"), useDevelopmentDatabase = environment === "development", ddb = databaseSettings("ddb_database")) => {
     const connections = [];
-    const config = { environment, db, ddb: databaseSettings("ddb_database"), getCurrentListDatabaseConfig: () => db };
+    const config = { environment, useDevelopmentDatabase, db, ddb, getCurrentListDatabaseConfig: () => db };
     class Sequelize {
         constructor(name, user, pass, options) {
             this.name = name;
@@ -47,7 +47,7 @@ test("development keeps DDB active and lazily reuses one separate DB connection"
     assert.equal(db.closeCount, 1);
 });
 
-test("production and production-env testing reuse the existing DB connection pool", async () => {
+test("production reuses the existing DB connection pool", async () => {
     const { service, connections } = connectionHarness("production");
     const active = service.connectDatabase();
     assert.equal(active.name, "db_database");
@@ -56,6 +56,30 @@ test("production and production-env testing reuse the existing DB connection poo
     assert.equal(connections.length, 1);
     await service.closeDatabases();
     assert.equal(active.closeCount, 1);
+});
+
+test("local production-env testing keeps DDB active and DB reads on a separate pool", async () => {
+    const { service, connections } = connectionHarness("production", databaseSettings("test_prod_db"), true);
+    const active = service.connectDatabase();
+    assert.equal(active.name, "ddb_database");
+    assert.equal(active.options.dialect, "mysql");
+    assert.equal(active.options.logging, false);
+    const db = service.getDBConnection();
+    assert.equal(db.name, "test_prod_db");
+    assert.equal(db.options.dialect, "mariadb");
+    assert.equal(service.getDBConnection(), db);
+    assert.equal(service.getDatabase().sequelizeDDB, active);
+    assert.equal(service.getDatabase().sequelizeDB, db);
+    assert.equal(connections.length, 2);
+    await service.closeDatabases();
+    assert.equal(active.closeCount, 1);
+    assert.equal(db.closeCount, 1);
+});
+
+test("local production-env testing with missing DDB settings fails without falling back to production DB", () => {
+    const { service, connections } = connectionHarness("production", databaseSettings("db"), true, {});
+    assert.throws(() => service.connectDatabase(), /database configuration is incomplete/);
+    assert.equal(connections.length, 0);
 });
 
 test("missing DB configuration fails explicitly without falling back to DDB", () => {

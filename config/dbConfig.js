@@ -5,9 +5,12 @@ let activeDatabase;
 let dbDatabase;
 
 const isDevelopment = config.environment === "development";
-const activeConfig = isDevelopment ? config.ddb : config.db;
-const activeDatabaseLabel = isDevelopment ? "Development" : "Production";
-const activeDialect = isDevelopment ? "mysql" : "mariadb";
+const useDevelopmentDatabase = config.useDevelopmentDatabase;
+const activeConfig = useDevelopmentDatabase ? config.ddb : config.db;
+const activeDatabaseLabel = useDevelopmentDatabase
+  ? (isDevelopment ? "Development" : "Local production test (DDB)")
+  : "Production";
+const activeDialect = useDevelopmentDatabase ? "mysql" : "mariadb";
 
 const createDatabaseConnection = (databaseConfig, dialect, label) => {
   const logging = isDevelopment ? console.log : false;
@@ -39,7 +42,7 @@ const connectDatabase = () => {
 };
 
 const getDBConnection = () => {
-  if (!isDevelopment) return connectDatabase();
+  if (!useDevelopmentDatabase) return connectDatabase();
   if (!dbDatabase) dbDatabase = createDatabaseConnection(config.getCurrentListDatabaseConfig(), "mariadb", "DB");
   return dbDatabase;
 };
@@ -53,8 +56,8 @@ const getDatabase = () => {
     sequelize: activeDatabase,
     activeDatabase,
     activeDatabaseLabel,
-    sequelizeDB: isDevelopment ? dbDatabase : activeDatabase,
-    sequelizeDDB: isDevelopment ? activeDatabase : undefined,
+    sequelizeDB: useDevelopmentDatabase ? dbDatabase : activeDatabase,
+    sequelizeDDB: useDevelopmentDatabase ? activeDatabase : undefined,
   };
 };
 
