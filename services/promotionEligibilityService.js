@@ -1,6 +1,7 @@
 const { Op, literal } = require("sequelize");
 const { sequelize, models } = require("../models");
 const { getNewZealandTime, toNewZealandDateTime } = require("../utils/nzTimeZone");
+const apiFields = require("../config/apiFields");
 
 const DEVICE_REDEMPTION_STATUS_AVAILABLE = 0;
 
@@ -141,6 +142,7 @@ const checkPromotionEligibility = async ({
     }
 
     const promotionGifts = await Promotion_Gifts.findAll({
+        attributes: apiFields.Promotion_Gifts,
         where: {
             promotion_id: promotionId,
             gift_id: { [Op.in]: gifts.map((gift) => gift.id) },

@@ -58,7 +58,7 @@ const claimHarness = ({ production = false, missingGift = false, unlinkedGift = 
         Promotions: { findByPk: dbRead("Promotions", { id: 7 }) },
         Promotion_Devices: { findAll: dbRead("Promotion_Devices", [{ promotion_id: 7 }]) },
         Promotion_Channels: { findAll: dbRead("Promotion_Channels", [{ promotion_id: 7 }]) },
-        Promotion_Gifts: { findAll: dbRead("Promotion_Gifts", catalogGifts.slice(0, unlinkedGift ? 1 : 2).map((gift) => ({ gift_id: gift.id }))) },
+        Promotion_Gifts: { findAll: dbRead("Promotion_Gifts", catalogGifts.slice(0, unlinkedGift ? 1 : 2).map((gift, index) => ({ promotion_id: 7, gift_id: gift.id, gift_comb: index }))) },
         Gifts: { findAll: dbRead("catalog Gifts", missingGift ? catalogGifts.slice(0, 1) : catalogGifts) },
     };
     const dbContext = production
@@ -114,6 +114,10 @@ test("development claims read DB promotion configuration but write only active D
     assert.deepEqual(writes.map((item) => item.table), ["begin", "Customers", "Claims", "Deliver_Addresses", "Claim_Gifts", "Devices", "commit", "email"]);
     assert.equal(writes.find((item) => item.table === "Claims").values.promotion_id, 7);
     assert.deepEqual(writes.find((item) => item.table === "Claim_Gifts").values.map((item) => item.gift_id), [111, 112]);
+    assert.deepEqual(res.data.gifts.map((gift) => ({ alias: gift.alias, gift_comb: gift.gift_comb })), [
+        { alias: giftAliases[0], gift_comb: 0 },
+        { alias: giftAliases[1], gift_comb: 1 },
+    ]);
     assert.equal(uploads.length, 2);
     assert.ok(uploads.every((item) => item.slug === 7 && item.claimType === "promotions"));
 });
@@ -148,6 +152,7 @@ test("production submissions still save customers, claims, addresses and gifts t
     const { res, error } = await submit();
     assert.equal(error, undefined);
     assert.equal(res.statusCode, 201);
+    assert.deepEqual(res.data.gifts.map((gift) => gift.gift_comb), [0, 1]);
     assert.deepEqual(writes.map((item) => item.table), ["begin", "Customers", "Claims", "Deliver_Addresses", "Claim_Gifts", "Devices", "commit", "email"]);
 });
 

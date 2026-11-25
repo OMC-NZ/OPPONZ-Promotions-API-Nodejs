@@ -4,6 +4,8 @@ const { findEligiblePromotionChannelsForDevice } = require("../services/promotio
 const { getEventDeviceVerification } = require("../services/eventEligibilityService");
 const { normalizeText } = require("../utils/text");
 const { buildAssetUrl } = require("../utils/assetUrl");
+const { buildPromotionGiftResponseMap } = require("../utils/promotionGiftResponse");
+const apiFields = require("../config/apiFields");
 const config = require("../config/envConfig");
 const { getNewZealandTime, toNewZealandDateTime } = require("../utils/nzTimeZone");
 const { sendSuccess } = require("../utils/apiResponse");
@@ -100,7 +102,7 @@ const verifyImei = async (req, res, next) => {
                 raw: true,
             }),
             Promotion_Gifts.findAll({
-                attributes: ["promotion_id", "gift_id"],
+                attributes: apiFields.Promotion_Gifts,
                 where: {
                     promotion_id: {
                         [Op.in]: eligiblePromotionIds,
@@ -134,18 +136,11 @@ const verifyImei = async (req, res, next) => {
 
         const promotionMap = new Map(promotions.map((item) => [String(item.id), item]));
         const channelMap = new Map(channels.map((item) => [String(item.code), item]));
-        const giftMap = new Map(gifts.map((item) => [String(item.id), item]));
         const channelAvailabilityByPromotion = new Map();
-        const giftIdsByPromotion = new Map();
+        const giftsByPromotion = buildPromotionGiftResponseMap({ gifts, promotionGifts });
 
         promotionChannels.forEach((item) => {
             channelAvailabilityByPromotion.set(String(item.promotion_id), item);
-        });
-
-        promotionGifts.forEach((item) => {
-            const promotionId = String(item.promotion_id);
-            if (!giftIdsByPromotion.has(promotionId)) giftIdsByPromotion.set(promotionId, new Set());
-            giftIdsByPromotion.get(promotionId).add(String(item.gift_id));
         });
 
         const getPromotionChannelData = (promotionId) => {
@@ -166,16 +161,6 @@ const verifyImei = async (req, res, next) => {
             const promotion = promotionMap.get(promotionId);
             if (!promotion) return [];
 
-            const promotionGiftData = [...(giftIdsByPromotion.get(promotionId) || new Set())]
-                .map((giftId) => giftMap.get(giftId))
-                .filter(Boolean)
-                .map((gift) => ({
-                    name: gift.name,
-                    alias: gift.alias,
-                    color: gift.color,
-                    status: gift.status,
-                }));
-
             return [{
                 promotion_id: promotion.id,
                 title: promotion.name,
@@ -184,7 +169,7 @@ const verifyImei = async (req, res, next) => {
                 banner_url: buildAssetUrl(config.r2.publicBaseUrl, "banners/Promotions", promotion.banner_url),
                 slug_url: promotion.slug_url,
                 termsURL: promotion.terms_url,
-                gifts: promotionGiftData,
+                gifts: giftsByPromotion.get(promotionId) || [],
             }];
         });
 

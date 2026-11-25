@@ -49,9 +49,10 @@ const checkEligibility = async ({ availableGifts = gifts, linkedGifts = gifts, r
         Promotion_Channels: { findAll: async () => [{ promotion_id: 7 }] },
         Promotion_Gifts: { findAll: async (options) => {
             assert.deepEqual(options.where.gift_id[Op.in], [11, 12]);
+            assert.deepEqual(options.attributes, ["promotion_id", "gift_id", "gift_comb"]);
             assert.equal(options.where.promotion_id, 7);
             assert.equal(options.transaction, transaction);
-            return linkedGifts.map((gift) => ({ gift_id: gift.id }));
+            return linkedGifts.map((gift) => ({ gift_id: gift.id, gift_comb: 3 }));
         } },
     };
     const service = loadModule("services/promotionEligibilityService.js", {
@@ -119,6 +120,7 @@ const submitClaim = async ({ eligible = true, failInsert = false, failAcquire = 
             assert.equal(options.promotionContext, promotionContext);
             return {
                 eligible, gifts, promotion: { id: 7 }, reason: eligible ? undefined : "GIFT_NOT_LINKED_TO_PROMOTION",
+                promotionGifts: gifts.map((gift, index) => ({ promotion_id: 7, gift_id: gift.id, gift_comb: index })),
                 device: { update: create("device") },
             };
         } },
@@ -152,6 +154,7 @@ test("submission saves both gift links in the claim transaction before sending e
     assert.equal(error, undefined);
     assert.equal(res.statusCode, 201);
     assert.equal(res.data.gift, "Earbuds White, Watch Black");
+    assert.deepEqual(res.data.gifts, gifts.map(({ id, ...gift }, index) => ({ ...gift, status: undefined, gift_comb: index })));
     assert.deepEqual(calls.find((call) => call.name === "gifts").values, [
         { claim_id: res.data.claim_id, gift_id: 11 },
         { claim_id: res.data.claim_id, gift_id: 12 },

@@ -1,5 +1,6 @@
 const { normalizeText, formatGiftName } = require("../utils/text");
 const { generateUniqueClaimId } = require("../utils/claimId");
+const { buildPromotionGiftResponseMap } = require("../utils/promotionGiftResponse");
 const { rollbackTransaction } = require("../utils/dbTransaction");
 const { sequelize, models, getDBModelContext } = require("../models");
 const {
@@ -250,7 +251,7 @@ const submitClaim = async (req, res, next) => {
             });
         }
 
-        const { device, gifts, promotion } = eligibility;
+        const { device, gifts, promotion, promotionGifts } = eligibility;
 
         if (receiptFile) {
             const receiptUpload = await uploadClaimFile({
@@ -339,6 +340,7 @@ const submitClaim = async (req, res, next) => {
             data: {
                 claim_id: claimId,
                 gift: gifts.map(formatGiftName).join(", "),
+                gifts: buildPromotionGiftResponseMap({ gifts, promotionGifts }).get(String(promotionId)) || [],
             },
         });
     } catch (error) {

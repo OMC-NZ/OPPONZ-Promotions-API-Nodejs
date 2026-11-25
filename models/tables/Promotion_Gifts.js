@@ -16,6 +16,10 @@ module.exports = (sequelize) => {
             type: DataTypes.INTEGER(11),
             allowNull: false,
         },
+        gift_comb: {
+            type: DataTypes.INTEGER(11),
+            allowNull: false,
+        }
     }, {
         tableName: "Promotion_Gifts",
         timestamps: false,

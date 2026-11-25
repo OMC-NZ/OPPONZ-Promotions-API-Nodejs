@@ -64,6 +64,15 @@ formData.append("gift_alias", JSON.stringify(["earbuds-white", "watch-black"]));
 
 Each alias must be a string of up to 45 characters and match a gift linked to the submitted promotion. A single alias string is not accepted. All selected gifts are saved to `Claim_Gifts` in the claim transaction and included in the confirmation email. The submission response keeps `data.gift` as a string containing all selected gift names, separated by commas.
 
+### Promotion Gift Metadata
+
+`Promotion_Gifts.gift_comb` is an integer on the promotion-gift relationship, not a field on `Gifts`. Both endpoints that query `Promotion_Gifts` return it with the associated gift:
+
+- `POST /api/promotions/verify-imei-purchase`: `data.promotions[].gifts[].gift_comb`.
+- `POST /api/claims`: `data.gifts[].gift_comb`, alongside the existing `data.claim_id` and `data.gift` fields.
+
+Each structured gift contains `name`, `alias`, `color`, `status`, and `gift_comb`. Values are returned as stored, including zero. The same gift can have different values in different promotions; distinct relationship rows are preserved. This field does not add combination-selection validation or change database routing, claim persistence, or gift-status filtering. `GET /api/promotions/current` does not query this table and keeps its existing response unchanged.
+
 ## Security
 
 This API includes security middleware and operational safeguards for rate limiting, trusted proxy IP handling, CORS, Helmet security headers, API key protection, reCAPTCHA verification, request/error/security logs, production error email alerts, unified error responses, response field allowlists, sensitive log redaction, route/method security logging, and reusable request validation.

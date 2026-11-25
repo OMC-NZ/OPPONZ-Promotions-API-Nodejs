@@ -128,6 +128,7 @@ const apiFields = {
     Promotion_Gifts: [
         "promotion_id",
         "gift_id",
+        "gift_comb",
     ],
 };
 

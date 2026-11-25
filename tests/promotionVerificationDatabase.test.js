@@ -9,8 +9,9 @@ const time = {
 };
 const responses = { sendSuccess: (req, res, options) => Object.assign(res, options) };
 
-const verificationHarness = ({ deviceFound = true, redemptionStatus = 0, environment = "development", localProductionTest = false, environmentFileName = ".env.production", failDeviceLookup = false } = {}) => {
+const verificationHarness = ({ deviceFound = true, redemptionStatus = 0, environment = "development", localProductionTest = false, environmentFileName = ".env.production", failDeviceLookup = false, extraPromotion = false } = {}) => {
     const queried = [];
+    const promotionIds = extraPromotion ? [7, 8] : [7];
     const useDevelopmentDatabase = environment === "development" || (localProductionTest && environmentFileName === ".env.test.prod");
     const deviceSource = useDevelopmentDatabase ? "DDB" : "DB";
     const Devices = { findOne: async (options) => {
@@ -26,19 +27,23 @@ const verificationHarness = ({ deviceFound = true, redemptionStatus = 0, environ
         Promotion_Devices: { findAll: async (options) => {
             queried.push("Promotion_Devices");
             assert.equal(options.where.eligible_model, "CPH1234");
-            return [{ promotion_id: 7 }];
+            return promotionIds.map((promotion_id) => ({ promotion_id }));
         } },
         Promotion_Channels: { findAll: async (options) => {
             queried.push("Promotion_Channels");
             assert.equal(options.where.channel_code, "TEST");
             assert.ok(options.where[Op.and].every((condition) => condition.val.includes("DB_TIME")));
-            return [{ promotion_id: 7, channel_code: "TEST", start_date: "01 Nov 2026", end_date: "30 Nov 2026" }];
+            return promotionIds.map((promotion_id) => ({ promotion_id, channel_code: "TEST", start_date: "01 Nov 2026", end_date: "30 Nov 2026" }));
         } },
         Promotions: { findAll: async () => {
             queried.push("Promotions");
-            return [{ id: 7, name: "DB promotion", slug_url: "db-promo", banner_url: "image.jpg", description: "DB offer", terms_url: "terms.pdf" }];
+            return promotionIds.map((id) => ({ id, name: "DB promotion", slug_url: "db-promo", banner_url: "image.jpg", description: "DB offer", terms_url: "terms.pdf" }));
         } },
-        Promotion_Gifts: { findAll: async () => { queried.push("Promotion_Gifts"); return [{ promotion_id: 7, gift_id: 11 }]; } },
+        Promotion_Gifts: { findAll: async (options) => {
+            assert.deepEqual(options.attributes, ["promotion_id", "gift_id", "gift_comb"]);
+            queried.push("Promotion_Gifts");
+            return promotionIds.map((promotion_id) => ({ promotion_id, gift_id: 11, gift_comb: promotion_id === 7 ? 0 : 4 }));
+        } },
         Channels: { findAll: async () => { queried.push("Channels"); return [{ code: "TEST", name: "DB channel" }]; } },
         Gifts: { findAll: async () => {
             queried.push("Gifts");
@@ -77,7 +82,16 @@ test("development promotion verification reads only Devices from DDB and the oth
     assert.equal(res.data.eligible, true);
     assert.equal(res.data.promotions[0].title, "DB promotion");
     assert.deepEqual(res.data.promotions[0].channel, { name: "DB channel", period: "01 Nov 2026 - 30 Nov 2026" });
-    assert.deepEqual(res.data.promotions[0].gifts, [{ name: "Earbuds", alias: "earbuds-white", color: "White", status: 2 }]);
+    assert.deepEqual(res.data.promotions[0].gifts, [{ name: "Earbuds", alias: "earbuds-white", color: "White", status: 2, gift_comb: 0 }]);
+});
+
+test("verification returns promotion-specific gift_comb when promotions share the same gift", async () => {
+    const { controller } = verificationHarness({ extraPromotion: true });
+    const res = {};
+    await controller.verifyImei({ body: { imei: "860000000000000", purchase_date: "2026-11-01" } }, res, (error) => { throw error; });
+    assert.deepEqual(res.data.promotions.map((promotion) => ({ id: promotion.promotion_id, gift_comb: promotion.gifts[0].gift_comb })), [
+        { id: 8, gift_comb: 4 }, { id: 7, gift_comb: 0 },
+    ]);
 });
 
 test("production verification continues to read all seven tables from DB even if only the local flag is set", async () => {
